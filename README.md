@@ -13,14 +13,13 @@ Interactive keybind cheatsheet for the [niri](https://github.com/YaLTeR/niri) Wa
 
 ## Install
 
-From [releases](https://github.com/ys-kalyakin/niri-kbinds/releases):
+One command (installs the latest release into `~/.local/bin`):
 
 ```bash
-tar xzf niri-kbinds-v0.1.0-x86_64-linux-gnu.tar.gz
-cp kbinds kbinds-overlay ~/.local/bin/
+wget -qO- https://raw.githubusercontent.com/ys-kalyakin/niri-kbinds/main/install.sh | sh
 ```
 
-From source: `cargo install --path .` (Rust stable, no system dependencies — installs `kbinds` and `kbinds-overlay`).
+Overrides: `KBINDS_VERSION=v0.1.0` pins a version, `KBINDS_INSTALL_DIR=...` changes the target directory. Manual way: download `niri-kbinds-<version>-x86_64-linux-gnu.tar.gz` from [releases](https://github.com/ys-kalyakin/niri-kbinds/releases), extract, copy `kbinds` and `kbinds-overlay` to your `PATH`. From source: `cargo install --path .` (Rust stable, no system dependencies).
 
 ## Setup
 
