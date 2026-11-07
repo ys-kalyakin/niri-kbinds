@@ -1,0 +1,5 @@
+// Минимальный конфликт A1: один combo на две разные команды.
+binds {
+    Mod+D { spawn "app-one" "cmd-a"; }
+    Mod+D { spawn "app-two" "cmd-b"; }
+}

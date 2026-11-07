@@ -1,0 +1,33 @@
+[package]
+name = "niri-kbinds"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Interactive cheatsheet for niri key binds: list, exec, fuzzel dmenu, audit"
+
+[lib]
+name = "niri_kbinds"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kbinds"
+path = "src/main.rs"
+
+[[bin]]
+name = "kbinds-overlay"
+path = "src/bin/overlay.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+iced = "0.14"
+iced_layershell = "0.19.1"
+iced_runtime = "0.14"
+kdl = { version = "6", features = ["v1"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# iced_layershell 0.19.1 is built against winit-core/winit-common
+# 0.31.0-beta.2; caret resolution picks beta.4, where iced_exdevtools
+# fails to compile (E0004, non-exhaustive NativeKeyCode match).
+winit-core = "=0.31.0-beta.2"
+winit-common = "=0.31.0-beta.2"

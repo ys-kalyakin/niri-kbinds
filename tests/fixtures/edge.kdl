@@ -1,0 +1,65 @@
+// Фикстура крайних случаев §7.1 ТЗ. Не является валидным конфигом niri по
+// смыслу (набор действий условный), но синтаксически — валидный KDL v1.
+include "./edge-inc.kdl"
+
+binds {
+    // Кириллица — все 24 имени из §7.2 ТЗ (включая Cyrillic_slash,
+    // которого нет в keysymdef.h: парсер обязан толерировать имя).
+    Mod+Cyrillic_a { focus-column-left; }
+    Mod+Cyrillic_be { focus-column-right; }
+    Mod+Cyrillic_de { focus-column-up; }
+    Mod+Cyrillic_el { focus-column-down; }
+    Mod+Cyrillic_em { focus-column-first; }
+    Mod+Cyrillic_er { focus-column-last; }
+    Mod+Cyrillic_es { focus-window-up; }
+    Mod+Cyrillic_ghe { focus-window-down; }
+    Mod+Cyrillic_ha { focus-window-previous; }
+    Mod+Cyrillic_hardsign { focus-workspace-up; }
+    Mod+Cyrillic_i { focus-workspace-down; }
+    Mod+Cyrillic_ie { focus-workspace-previous; }
+    Mod+Cyrillic_ka { focus-monitor-up; }
+    Mod+Cyrillic_o { focus-monitor-down; }
+    Mod+Cyrillic_sha { focus-monitor-left; }
+    Mod+Cyrillic_shcha { focus-monitor-right; }
+    Mod+Cyrillic_shorti { move-column-left; }
+    Mod+Cyrillic_slash { move-column-right; }
+    Mod+Cyrillic_tse { move-column-up; }
+    Mod+Cyrillic_u { move-column-down; }
+    Mod+Cyrillic_ve { move-window-up; }
+    Mod+Cyrillic_yeru { move-window-down; }
+    Mod+Cyrillic_yu { move-column-to-first; }
+    Mod+Cyrillic_ze { move-column-to-last; }
+
+    // Блок-форма с атрибутами.
+    Mod+Q repeat=false { close-window; }
+    Mod+Space repeat=false hotkey-overlay-title="Switch layout" { switch-layout "next"; }
+
+    // spawn с аргументами и spawn-sh.
+    Mod+T { spawn "kitty"; }
+    Mod+N { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
+    Mod+K { spawn-sh "kitty --class kitty-float"; }
+
+    // Дублированный combo на разные команды (живой случай Mod+D).
+    Mod+D { spawn "noctalia" "msg" "panel-toggle" "launcher"; }
+    Mod+D { spawn "vicinae" "toggle"; }
+
+    // Один экшен на разных клавишах — НЕ конфликт.
+    Mod+Left { focus-column-left; }
+    Mod+H { focus-column-left; }
+
+    // XF86-клавиша и неизвестные свойства.
+    XF86AudioMute allow-when-locked=true { spawn "pamixer" "-t"; }
+    Mod+M cooldown-ms=100 { toggle-window-floating; }
+
+    // condition внутри тела бинда — толерировать, не экшен.
+    Mod+C {
+        condition { match app-id="^org.kde$"; }
+        close-window;
+    }
+
+    // Комментарии по всему файлу.
+    Mod+Shift+Slash { show-hotkey-overlay; } // строковый комментарий
+    /* блочный
+       комментарий */
+    Mod+Return { toggle-overview; }
+}

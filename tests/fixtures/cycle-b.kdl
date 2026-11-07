@@ -1,0 +1,2 @@
+// Вторая половина цикла include (см. cycle-a.kdl).
+include "./cycle-a.kdl"

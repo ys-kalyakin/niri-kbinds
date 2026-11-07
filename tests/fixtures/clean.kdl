@@ -1,0 +1,34 @@
+// Негативный тест аудита: покрывает весь список A3, все имена известны
+// словарю, конфликтов combo нет → аудит обязан дать ноль находок.
+binds {
+    Mod+F1  { screenshot; }
+    Mod+F2  { screenshot-screen; }
+    Mod+F3  { screenshot-window; }
+    Mod+F4  { toggle-window-floating; }
+    Mod+F5  { consume-or-expel-window-left; }
+    Mod+F6  { consume-or-expel-window-right; }
+    Mod+F7  { consume-window-into-column; }
+    Mod+F8  { expel-window-from-column; }
+    Mod+F9  { toggle-column-tabbed-display; }
+    Mod+F10 { maximize-column; }
+    Mod+F11 { toggle-overview; }
+    Mod+F12 { switch-focus-between-floating-and-tiling; }
+    Mod+F13 { focus-window-previous; }
+    Mod+F14 { move-column-to-first; }
+    Mod+F15 { move-column-to-last; }
+    Mod+F16 { move-workspace-up; }
+    Mod+F17 { move-workspace-down; }
+    Mod+F18 { expand-column-to-available-width; }
+    Mod+F19 { center-column; }
+    Mod+F20 { center-visible-columns; }
+    Mod+F21 { switch-preset-column-width; }
+    Mod+F22 { switch-preset-window-height; }
+    Mod+F23 { set-window-height; }
+    Mod+F24 { set-column-width; }
+    Mod+F25 { toggle-keyboard-shortcuts-inhibit; }
+    Mod+F26 { power-off-monitors; }
+    Mod+F27 { quit; }
+    Mod+F28 { show-hotkey-overlay; }
+    Mod+F29 { switch-layout; }
+    Mod+F30 { reset-window-height; }
+}

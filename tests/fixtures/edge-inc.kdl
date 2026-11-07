@@ -1,0 +1,5 @@
+// Цель include для edge.kdl: бинды из включённого файла попадают в модель.
+binds {
+    Mod+I { focus-column-right; }
+    Mod+J repeat=false { close-window; }
+}
