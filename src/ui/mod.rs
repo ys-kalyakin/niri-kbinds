@@ -4,3 +4,4 @@
 pub mod app;
 pub mod items;
 pub mod theme;
+pub mod typography;

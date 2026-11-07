@@ -7,6 +7,7 @@ use anyhow::{Context, Result, bail};
 use iced::theme::Style;
 use iced::widget::Id;
 use iced::widget::operation::RelativeOffset;
+use iced::widget::scrollable::Scrollbar;
 use iced::widget::{column, container, mouse_area, operation, row, scrollable, text, text_input};
 use iced::{
     Alignment, Background, Element, Event, Font, Length, Padding, Point, Size, Subscription, Task,
@@ -21,6 +22,7 @@ use iced_runtime::task::widget as task_widget;
 
 use super::items::{self, Row};
 use super::theme::Palette;
+use super::typography;
 use crate::l10n::{self, Msg};
 use crate::model::Bind;
 
@@ -34,6 +36,9 @@ const CHEATSHEET_SCROLL: &str = "kbinds-overlay-cheatsheet";
 pub struct OverlayOptions {
     pub config_path: PathBuf,
     pub dry_run: bool,
+    /// Raw `--font-scale` CLI value; resolved against the theme cache in
+    /// [`run`] (design D1) — `None` lets the cache token (or 1.0) decide.
+    pub font_scale: Option<f32>,
 }
 
 /// Parse the binds and boot the layer-shell overlay on the focused output.
@@ -47,9 +52,12 @@ pub fn run(opts: OverlayOptions) -> Result<()> {
         .with_context(|| l10n::config_parse(lang, &opts.config_path))?;
     let (output, logical) = focused_output().context(l10n::tr(lang, Msg::FocusedOutputFail))?;
     let palette = Palette::load();
+    // Font scale: the CLI flag wins over the theme-cache token, over 1.0;
+    // the same cache file the palette reads (design D1/D5).
+    let font_scale = typography::resolve(opts.font_scale, cache_font_scale());
 
     application(
-        boot(binds, logical, palette, opts.dry_run),
+        boot(binds, logical, palette, font_scale, opts.dry_run),
         namespace,
         update,
         view,
@@ -79,10 +87,19 @@ pub fn run(opts: OverlayOptions) -> Result<()> {
     .map_err(|err| anyhow::anyhow!("kbinds-overlay: {err}"))
 }
 
+/// The `font_scale` token of the noctalia cache — the same file
+/// `Palette::load` reads; unreadable/unparsable/absent → `None` (design D5).
+fn cache_font_scale() -> Option<f32> {
+    let path = super::theme::cache_path()?;
+    let content = std::fs::read_to_string(path).ok()?;
+    typography::cache_scale(&content)
+}
+
 fn boot(
     binds: Vec<Bind>,
     logical: Size,
     palette: Palette,
+    font_scale: f32,
     dry_run: bool,
 ) -> impl Fn() -> (Overlay, Task<Message>) {
     move || {
@@ -102,6 +119,7 @@ fn boot(
             // `niri msg --json focused-output` is the window size.
             window: logical,
             palette,
+            font_scale,
         };
         (state, task_widget(focusable::focus(Id::from(SEARCH_INPUT))))
     }
@@ -128,6 +146,9 @@ struct Overlay {
     window: Size,
     /// Theme resolved from the noctalia palette cache (design D9).
     palette: Palette,
+    /// Resolved font scale (CLI flag → theme cache → 1.0, clamped
+    /// 0.5–3.0): every text size is a `typography` base × this value.
+    font_scale: f32,
 }
 
 // The macro must come before the derives: it appends its own variants to
@@ -203,6 +224,7 @@ fn on_iced_event(state: &mut Overlay, event: Event) -> Task<Message> {
                     (state.cursor.x, state.cursor.y),
                     (state.window.width, state.window.height),
                     !state.cheatsheet.is_empty(),
+                    state.font_scale,
                 )
             {
                 iced::exit()
@@ -300,11 +322,17 @@ fn view(state: &Overlay) -> Element<'_, Message> {
     // The card rectangle comes from `items::card_rect` — the same function
     // the outside-click hit test uses (design D2).
     let has_cheatsheet = !state.cheatsheet.is_empty();
-    let (_, _, card_width, card_height) =
-        items::card_rect((state.window.width, state.window.height), has_cheatsheet);
+    let (_, _, card_width, card_height) = items::card_rect(
+        (state.window.width, state.window.height),
+        has_cheatsheet,
+        state.font_scale,
+    );
     let (card_width, card_height) = (card_width.max(1.0), card_height.max(1.0));
     // Palette is `Copy`: capture it by value in the style closures.
     let palette = state.palette;
+    // Every text size is a `typography` base × the resolved scale
+    // (change `overlay-font-scale`).
+    let scale = state.font_scale;
 
     let search = text_input(
         l10n::tr(l10n::current(), Msg::SearchPlaceholder),
@@ -312,7 +340,7 @@ fn view(state: &Overlay) -> Element<'_, Message> {
     )
     .on_input(Message::Query)
     .on_submit(Message::Submit)
-    .size(16)
+    .size(typography::SEARCH * scale)
     .padding(Padding {
         top: 8.0,
         bottom: 8.0,
@@ -330,7 +358,7 @@ fn view(state: &Overlay) -> Element<'_, Message> {
         .map(|(position, row)| match row {
             Row::Header(name) => container(
                 text(name.clone())
-                    .size(12)
+                    .size(typography::GROUP_HEADER * scale)
                     .style(move |theme| palette.secondary_style(theme)),
             )
             .padding(Padding {
@@ -351,14 +379,15 @@ fn view(state: &Overlay) -> Element<'_, Message> {
         .filter(|row| matches!(row, Row::Bind { .. }))
         .count();
     let counter = text(l10n::counter(l10n::current(), visible, state.binds.len()))
-        .size(11)
+        .size(typography::COUNTER_FOOTER * scale)
         .style(move |theme| palette.secondary_style(theme));
     let footer = text(l10n::tr(l10n::current(), Msg::FooterHints))
-        .size(11)
+        .size(typography::COUNTER_FOOTER * scale)
         .style(move |theme| palette.secondary_style(theme));
 
     let list = scrollable(column(rows))
         .id(Id::from(LIST_SCROLL))
+        .direction(scrollable::Direction::Vertical(Scrollbar::hidden()))
         .width(Length::Fill)
         .height(Length::Fill);
 
@@ -399,14 +428,14 @@ fn view(state: &Overlay) -> Element<'_, Message> {
 }
 
 /// Keycap chips of a bind — the shared look of the list rows and the
-/// cheat-sheet panel (mono 11px, keycap style).
-fn keycap_chips(bind: &Bind, palette: Palette) -> Vec<Element<'_, Message>> {
+/// cheat-sheet panel (mono keycaps, keycap style).
+fn keycap_chips(bind: &Bind, palette: Palette, font_scale: f32) -> Vec<Element<'_, Message>> {
     items::keycaps(bind)
         .into_iter()
         .map(|key| {
             container(
                 text(key)
-                    .size(11)
+                    .size(typography::KEYCAP * font_scale)
                     .font(Font::MONOSPACE)
                     .style(move |theme| palette.text_primary_style(theme)),
             )
@@ -429,11 +458,11 @@ fn bind_row(state: &Overlay, position: usize, index: usize) -> Element<'_, Messa
     let selected = position == state.selected;
     let palette = state.palette;
     let title = text(bind.title.clone())
-        .size(14)
+        .size(typography::ROW_TITLE * state.font_scale)
         .style(move |theme| palette.text_primary_style(theme));
     let content = row![
         container(title).width(Length::Fill),
-        row(keycap_chips(bind, palette)).spacing(4)
+        row(keycap_chips(bind, palette, state.font_scale)).spacing(4)
     ]
     .align_y(Alignment::Center);
     container(mouse_area(content).on_press(Message::ClickRow(position)))
@@ -459,15 +488,16 @@ fn cheatsheet_panel(state: &Overlay, palette: Palette) -> Element<'_, Message> {
         .map(|&index| cheat_row(state, index, palette))
         .collect();
     let header = text(l10n::tr(l10n::current(), Msg::CheatsheetHeader))
-        .size(12)
+        .size(typography::CHEATSHEET_HEADER * state.font_scale)
         .style(move |theme| palette.secondary_style(theme));
     let list = scrollable(column(rows))
         .id(Id::from(CHEATSHEET_SCROLL))
+        .direction(scrollable::Direction::Vertical(Scrollbar::hidden()))
         .width(Length::Fill)
         .height(Length::Fill);
     column![header, list]
         .spacing(6)
-        .width(Length::Fixed(items::CHEATSHEET_WIDTH))
+        .width(Length::Fixed(items::CHEATSHEET_WIDTH * state.font_scale))
         .height(Length::Fill)
         .into()
 }
@@ -478,11 +508,11 @@ fn cheatsheet_panel(state: &Overlay, palette: Palette) -> Element<'_, Message> {
 fn cheat_row(state: &Overlay, index: usize, palette: Palette) -> Element<'_, Message> {
     let bind = &state.binds[index];
     let title = text(bind.title.clone())
-        .size(14)
+        .size(typography::ROW_TITLE * state.font_scale)
         .style(move |theme| palette.text_primary_style(theme));
     let content = row![
         container(title).width(Length::Fill),
-        row(keycap_chips(bind, palette)).spacing(4)
+        row(keycap_chips(bind, palette, state.font_scale)).spacing(4)
     ]
     .align_y(Alignment::Center);
     container(content)

@@ -42,11 +42,11 @@ The `Slash`+`backslash` pair covers both keyboard layouts; `Mod+Shift+/` is take
 kbinds list [--json] [--config PATH]
 kbinds exec <id> [--dry-run] [--config PATH]
 kbinds dmenu [--launcher fuzzel] [--config PATH]
-kbinds overlay [--dry-run] [--mode center] [--config PATH]
+kbinds overlay [--dry-run] [--mode center] [--font-scale SCALE] [--config PATH]
 kbinds audit [--json] [--strict] [--config PATH]
 ```
 
-`audit --strict` exits with code 1 when errors are found. The overlay UI follows the system locale (ru/en) and the noctalia theme palette via `~/.cache/kbinds/theme.json` (a built-in fallback palette is used when it's absent).
+`audit --strict` exits with code 1 when errors are found. The overlay UI follows the system locale (ru/en) and the noctalia theme palette via `~/.cache/kbinds/theme.json` (a built-in fallback palette is used when it's absent). The overlay text renders at fixed base sizes × a font scale taken from `--font-scale SCALE`, or the optional `font_scale` token of the same cache file, or 1.0 — the flag wins, values are clamped to 0.5–3.0.
 
 ## Development
 

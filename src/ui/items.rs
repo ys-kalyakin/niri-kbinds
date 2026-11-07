@@ -106,24 +106,30 @@ pub fn cheatsheet_binds(binds: &[Bind]) -> Vec<usize> {
 /// Card width without the cheat-sheet panel (the MVP2 «Центр» layout).
 pub const CARD_WIDTH: f32 = 600.0;
 /// Card width with the cheat-sheet panel: the 600px list column, a 1px
-/// separator and the 300px panel (design D2).
-pub const CARD_WIDTH_CHEATSHEET: f32 = 900.0;
+/// separator and the 400px panel (design D2; the panel was widened 300→400
+/// during acceptance — titles + keycaps did not fit at 300px).
+pub const CARD_WIDTH_CHEATSHEET: f32 = 1000.0;
 /// Fixed width of the cheat-sheet panel on the right (design D2).
-pub const CHEATSHEET_WIDTH: f32 = 300.0;
+pub const CHEATSHEET_WIDTH: f32 = 400.0;
 
-/// Card geometry of the «Центр» layout: centered, 600px wide — or 900px
-/// when the cheat-sheet panel is shown (capped at 92% of the window),
-/// 640px tall (capped the same way). Returns `(x, y, width, height)`.
+/// Card geometry of the «Центр» layout: centered, 600px wide — or 1000px
+/// when the cheat-sheet panel is shown — 640px tall, all multiplied by
+/// `font_scale` (change `overlay-font-scale`, design D6) and capped at
+/// 92% of the window in each dimension. Returns `(x, y, width, height)`.
 /// The single source of the card rectangle for both the layout and the
 /// outside-click hit test (design D2).
-pub fn card_rect(window: (f32, f32), has_cheatsheet: bool) -> (f32, f32, f32, f32) {
+pub fn card_rect(
+    window: (f32, f32),
+    has_cheatsheet: bool,
+    font_scale: f32,
+) -> (f32, f32, f32, f32) {
     let base = if has_cheatsheet {
         CARD_WIDTH_CHEATSHEET
     } else {
         CARD_WIDTH
     };
-    let width = base.min(window.0 * 0.92);
-    let height = 640.0_f32.min(window.1 * 0.92);
+    let width = (base * font_scale).min(window.0 * 0.92);
+    let height = (640.0_f32 * font_scale).min(window.1 * 0.92);
     (
         (window.0 - width) / 2.0,
         (window.1 - height) / 2.0,
@@ -134,8 +140,13 @@ pub fn card_rect(window: (f32, f32), has_cheatsheet: bool) -> (f32, f32, f32, f3
 
 /// Whether a cursor position is outside the card (a click there closes the
 /// overlay, SPEC-V2 §5.7).
-pub fn is_outside_card(cursor: (f32, f32), window: (f32, f32), has_cheatsheet: bool) -> bool {
-    let (x, y, width, height) = card_rect(window, has_cheatsheet);
+pub fn is_outside_card(
+    cursor: (f32, f32),
+    window: (f32, f32),
+    has_cheatsheet: bool,
+    font_scale: f32,
+) -> bool {
+    let (x, y, width, height) = card_rect(window, has_cheatsheet, font_scale);
     cursor.0 < x || cursor.0 >= x + width || cursor.1 < y || cursor.1 >= y + height
 }
 
@@ -272,35 +283,87 @@ mod tests {
 
     #[test]
     fn card_geometry_and_hit_test() {
-        // Single-column card (no titled binds): the MVP2 geometry.
-        let (x, y, w, h) = card_rect((2560.0, 1440.0), false);
+        // Single-column card (no titled binds): the MVP2 geometry at
+        // font scale 1.0.
+        let (x, y, w, h) = card_rect((2560.0, 1440.0), false, 1.0);
         assert_eq!((w, h), (600.0, 640.0));
         assert_eq!((x, y), (980.0, 400.0), "card is centered");
-        assert!(!is_outside_card((1280.0, 720.0), (2560.0, 1440.0), false));
-        assert!(is_outside_card((100.0, 720.0), (2560.0, 1440.0), false));
-        assert!(is_outside_card((1280.0, 100.0), (2560.0, 1440.0), false));
+        assert!(!is_outside_card(
+            (1280.0, 720.0),
+            (2560.0, 1440.0),
+            false,
+            1.0
+        ));
+        assert!(is_outside_card(
+            (100.0, 720.0),
+            (2560.0, 1440.0),
+            false,
+            1.0
+        ));
+        assert!(is_outside_card(
+            (1280.0, 100.0),
+            (2560.0, 1440.0),
+            false,
+            1.0
+        ));
         // Two-column card with the cheat-sheet panel (design D2).
-        let (x, y, w, h) = card_rect((2560.0, 1440.0), true);
-        assert_eq!((w, h), (900.0, 640.0));
-        assert_eq!((x, y), (830.0, 400.0), "wider card stays centered");
-        assert!(!is_outside_card((1280.0, 720.0), (2560.0, 1440.0), true));
+        let (x, y, w, h) = card_rect((2560.0, 1440.0), true, 1.0);
+        assert_eq!((w, h), (1000.0, 640.0));
+        assert_eq!((x, y), (780.0, 400.0), "wider card stays centered");
+        assert!(!is_outside_card(
+            (1280.0, 720.0),
+            (2560.0, 1440.0),
+            true,
+            1.0
+        ));
         assert!(
-            is_outside_card((820.0, 720.0), (2560.0, 1440.0), true),
-            "left of the 900px card closes"
+            is_outside_card((770.0, 720.0), (2560.0, 1440.0), true, 1.0),
+            "left of the 1000px card closes"
         );
         assert!(
-            !is_outside_card((840.0, 720.0), (2560.0, 1440.0), true),
-            "inside the 900px card does not close"
+            !is_outside_card((790.0, 720.0), (2560.0, 1440.0), true, 1.0),
+            "inside the 1000px card does not close"
         );
     }
 
     #[test]
     fn card_width_is_capped_at_92_percent() {
-        let (_, _, w, h) = card_rect((500.0, 600.0), false);
+        let (_, _, w, h) = card_rect((500.0, 600.0), false, 1.0);
         assert_eq!(w, 460.0, "0.92 * 500");
         assert_eq!(h, 552.0, "0.92 * 600");
-        let (_, _, w, _) = card_rect((500.0, 600.0), true);
-        assert_eq!(w, 460.0, "the 900px card is capped the same way");
+        let (_, _, w, _) = card_rect((500.0, 600.0), true, 1.0);
+        assert_eq!(w, 460.0, "the 1000px card is capped the same way");
+    }
+
+    #[test]
+    fn card_geometry_scales_with_font_scale() {
+        // The card grows by the same factor as the text (design D6).
+        let (x, y, w, h) = card_rect((2560.0, 1440.0), true, 1.5);
+        assert_eq!((w, h), (1500.0, 960.0), "1000×640 × 1.5");
+        assert_eq!((x, y), (530.0, 240.0), "the grown card stays centered");
+        let (_, _, w, h) = card_rect((2560.0, 1440.0), false, 1.5);
+        assert_eq!((w, h), (900.0, 960.0), "600×640 × 1.5");
+        // The hit test follows the grown rectangle.
+        assert!(!is_outside_card(
+            (1280.0, 720.0),
+            (2560.0, 1440.0),
+            true,
+            1.5
+        ));
+        assert!(
+            is_outside_card((520.0, 720.0), (2560.0, 1440.0), true, 1.5),
+            "left of the 1500px card (edge at 530) closes"
+        );
+    }
+
+    #[test]
+    fn scaled_card_is_capped_at_92_percent() {
+        // At big scales the cap still holds in each dimension.
+        let (_, _, w, h) = card_rect((1000.0, 800.0), false, 3.0);
+        assert_eq!(w, 920.0, "0.92 * 1000 beats 600 * 3");
+        assert_eq!(h, 736.0, "0.92 * 800 beats 640 * 3");
+        let (_, _, w, _) = card_rect((1000.0, 800.0), true, 3.0);
+        assert_eq!(w, 920.0, "the 3000px card is capped the same way");
     }
 
     #[test]

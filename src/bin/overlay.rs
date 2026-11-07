@@ -23,6 +23,11 @@ struct Args {
     /// Overlay mode (only `center` is implemented)
     #[arg(long, default_value = "center", value_name = "MODE", value_parser = ["center"])]
     mode: String,
+
+    /// Font scale of the overlay text (overrides the theme-cache
+    /// `font_scale` token; clamped to 0.5–3.0)
+    #[arg(long, value_name = "SCALE")]
+    font_scale: Option<f32>,
 }
 
 fn main() {
@@ -39,6 +44,7 @@ fn main() {
         niri_kbinds::ui::app::run(niri_kbinds::ui::app::OverlayOptions {
             config_path,
             dry_run: args.dry_run,
+            font_scale: args.font_scale,
         })
     });
     if let Err(err) = result {

@@ -114,6 +114,7 @@ pub enum Msg {
     FlagStrict,
     FlagLauncher,
     FlagMode,
+    FlagFontScale,
     ArgId,
     // CLI help: the `kbinds-overlay` binary.
     OverlayBinAbout,
@@ -202,6 +203,12 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
         (Msg::FlagLauncher, Lang::En) => "Launcher binary to use",
         (Msg::FlagMode, Lang::Ru) => "Режим оверлея (реализован только `center`)",
         (Msg::FlagMode, Lang::En) => "Overlay mode (only `center` is implemented)",
+        (Msg::FlagFontScale, Lang::Ru) => {
+            "Масштаб шрифта оверлея (перекрывает токен `font_scale` из кэша темы; 0.5–3.0)"
+        }
+        (Msg::FlagFontScale, Lang::En) => {
+            "Font scale of the overlay text (overrides the theme-cache `font_scale` token; clamped to 0.5–3.0)"
+        }
         (Msg::ArgId, Lang::Ru) => "Id бинда, как показано в `kbinds list --json`",
         (Msg::ArgId, Lang::En) => "Bind id, as shown by `kbinds list --json`",
         (Msg::OverlayBinAbout, Lang::Ru) => "GUI-шпаргалка биндов niri",
@@ -359,7 +366,11 @@ pub fn apply_cli_texts(cmd: &mut clap::Command, lang: Lang) {
         (
             "overlay",
             Msg::CmdOverlay,
-            &[("dry_run", Msg::FlagDryRun), ("mode", Msg::FlagMode)],
+            &[
+                ("dry_run", Msg::FlagDryRun),
+                ("mode", Msg::FlagMode),
+                ("font_scale", Msg::FlagFontScale),
+            ],
         ),
     ];
     // Mutate subcommands in place: `about`/`mut_arg` are consuming builder
@@ -390,6 +401,7 @@ pub fn apply_overlay_cli_texts(cmd: &mut clap::Command, lang: Lang) {
         ("config", Msg::FlagConfig),
         ("dry_run", Msg::FlagDryRun),
         ("mode", Msg::FlagMode),
+        ("font_scale", Msg::FlagFontScale),
     ] {
         let help = tr(lang, msg);
         owned = owned.mut_arg(arg_id, |arg| arg.help(help));

@@ -57,6 +57,10 @@ enum Command {
         /// Overlay mode (only `center` is implemented)
         #[arg(long, default_value = "center", value_name = "MODE", value_parser = ["center"])]
         mode: String,
+        /// Font scale of the overlay text (overrides the theme-cache
+        /// `font_scale` token; clamped to 0.5–3.0)
+        #[arg(long, value_name = "SCALE")]
+        font_scale: Option<f32>,
     },
 }
 
@@ -100,10 +104,15 @@ fn run(cli: Cli) -> Result<i32> {
             let has_errors = niri_kbinds::cmd_audit(&config_path, json)?;
             Ok(i32::from(strict && has_errors))
         }
-        Command::Overlay { dry_run, .. } => {
+        Command::Overlay {
+            dry_run,
+            font_scale,
+            ..
+        } => {
             niri_kbinds::ui::app::run(niri_kbinds::ui::app::OverlayOptions {
                 config_path,
                 dry_run,
+                font_scale,
             })?;
             Ok(0)
         }
