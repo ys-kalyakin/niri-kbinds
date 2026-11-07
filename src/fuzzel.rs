@@ -75,9 +75,13 @@ pub fn pick(launcher: &str, binds: &[Bind]) -> Result<Option<Bind>> {
         .spawn()
         .with_context(|| l10n::launcher_launch_failed(lang, launcher))?;
     if let Some(mut stdin) = child.stdin.take() {
+        // The launcher may exit before reading all items (instant Esc,
+        // crash): a broken pipe while feeding means the same as an empty
+        // selection, so stop feeding and let wait_with_output decide (D6).
         for (item, _) in &menu {
-            writeln!(stdin, "{item}")
-                .with_context(|| l10n::launcher_feed_failed(lang, launcher))?;
+            if writeln!(stdin, "{item}").is_err() {
+                break;
+            }
         }
     }
     let output = child.wait_with_output()?;

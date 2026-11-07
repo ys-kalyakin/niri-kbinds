@@ -257,14 +257,6 @@ pub fn launcher_launch_failed(lang: Lang, launcher: &str) -> String {
     }
 }
 
-/// Writing menu items to the launcher failed.
-pub fn launcher_feed_failed(lang: Lang, launcher: &str) -> String {
-    match lang {
-        Lang::Ru => format!("передача пунктов в {launcher}"),
-        Lang::En => format!("feeding items to {launcher}"),
-    }
-}
-
 /// The launcher's selection does not map back to a bind.
 pub fn choice_not_matched(lang: Lang, choice: &str) -> String {
     match lang {
