@@ -1,98 +1,108 @@
-# Design: шпаргалка важных клавиш в оверлее
+# Design: important-keys cheat sheet in the overlay
 
 ## Context
 
-Оверлей «Центр» (MVP2) — одна карточка 600×640: поиск, список, счётчик, футер
-(`src/ui/app.rs::view`). Модель уже содержит `overlay_title_present` для каждого
-бинда (`src/model.rs`); на живом конфиге таких 16. Ничего нового парсить не
-нужно — мотивация в proposal.md, контракт в дельте спеки.
+The "Center" overlay (MVP2) is a single 600×640 card: search, list, counter,
+footer (`src/ui/app.rs::view`). The model already contains
+`overlay_title_present` for every bind (`src/model.rs`); there are 16 of them
+on the live config. Nothing new needs to be parsed — motivation in
+proposal.md, contract in the spec delta.
 
-Ограничения, унаследованные от MVP2: iced 0.14 + iced_layershell 0.19.1 (пин
-`winit-core/winit-common =0.31.0-beta.2`); размер окна из `niri msg --json
-focused-output`; `#[to_layer_message]` над `#[derive]`; layer-поверхность не
-получает `Resized` через подписку.
+Constraints inherited from MVP2: iced 0.14 + iced_layershell 0.19.1 (pin
+`winit-core/winit-common =0.31.0-beta.2`); window size from `niri msg --json
+focused-output`; `#[to_layer_message]` above `#[derive]`; the layer surface
+does not receive `Resized` through the subscription.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Правая колонка-шпаргалка: бинды с `hotkey-overlay-title`, «title + keycaps».
-- Read-only: без кликов, без реакции на поиск и `↑↓`.
-- Обновить геометрию карточки и хит-тест «клик вне карточки».
-- Чистая функция выборки в `items.rs`, покрытая юнит-тестами (паттерн MVP2).
+- A right cheat-sheet column: binds with `hotkey-overlay-title`,
+  "title + keycaps".
+- Read-only: no clicks, no reaction to the search or `↑↓`.
+- Update the card geometry and the "click outside the card" hit test.
+- A pure selection function in `items.rs`, covered by unit tests (the MVP2
+  pattern).
 
 **Non-Goals:**
-- Интерактивность панели (клик = выполнить) — отвергнуто пользователем.
-- `--mode panel` (правая закреплённая панель на весь экран) — stretch из §8
-  SPEC-V2, не путать с колонкой внутри карточки.
-- Новые токены темы / правки noctalia-шаблона — используем существующие роли.
-- Управление видимостью панели (флаг/клавиша) — панель постоянна.
+- Panel interactivity (click = execute) — rejected by the user.
+- `--mode panel` (a full-screen docked panel on the right) — a stretch goal
+  from §8 of SPEC-V2, not to be confused with the column inside the card.
+- New theme tokens / edits to the noctalia template — we use the existing
+  roles.
+- Panel visibility control (a flag/a key) — the panel is permanent.
 
 ## Decisions
 
-**D1. Выборка шпаргалки — pure-функция в `items.rs`.**
-`cheatsheet_binds(&[Bind]) -> Vec<usize>` — индексы биндов с
-`overlay_title_present == true`, в порядке конфига. Считается один раз в `boot`
-и хранится в `Overlay` (поле `cheatsheet: Vec<usize>`); `update()` её не
-трогает — отсюда «не фильтруется поиском» бесплатно. Альтернатива — фильтр в
-`view` на каждом кадре: тоже дёшево, но состояние в struct проще тестировать и
-читать. Альтернатива — захватывать бинды по значению: дублирование данных.
+**D1. Cheat sheet selection — a pure function in `items.rs`.**
+`cheatsheet_binds(&[Bind]) -> Vec<usize>` — indices of binds with
+`overlay_title_present == true`, in config order. Computed once in `boot` and
+stored in `Overlay` (the `cheatsheet: Vec<usize>` field); `update()` does not
+touch it — hence "not filtered by search" for free. Alternative — a filter in
+`view` on every frame: also cheap, but state in the struct is easier to test
+and read. Alternative — capturing the binds by value: data duplication.
 
-**D2. Геометрия: 900 + 300, динамическое исчезновение колонки.**
-Константы: `CARD_WIDTH = 900`, `CHEATSHEET_WIDTH = 300` (левая колонка
-`Length::Fill` ≈ 600 — прежняя ширина сохраняется), `CARD_HEIGHT = 640` без
-изменений. `items::card_rect(window)` → `card_rect(window, has_cheatsheet:
-bool)`: с панелью ширина 900, без — 600; `is_outside_card` принимает тот же
-параметр, `app.rs` передаёт `!state.cheatsheet.is_empty()`. Хит-тест и вёрстка
-используют одну функцию — единственный источник правды о прямоугольнике.
-Альтернатива «всегда 900 с пустой панелью» — мёртвое место при нуле тайтлов.
+**D2. Geometry: 900 + 300, the column disappears dynamically.**
+Constants: `CARD_WIDTH = 900`, `CHEATSHEET_WIDTH = 300` (the left column
+`Length::Fill` ≈ 600 — the former width is preserved), `CARD_HEIGHT = 640`
+unchanged. `items::card_rect(window)` → `card_rect(window, has_cheatsheet:
+bool)`: with the panel the width is 900, without it — 600; `is_outside_card`
+takes the same parameter, `app.rs` passes `!state.cheatsheet.is_empty()`.
+The hit test and the layout use one function — the single source of truth
+about the rectangle. The alternative "always 900 with an empty panel" — dead
+space when there are zero titles.
 
-**D3. Вёрстка: `row![левая_колонка, разделитель, панель]` внутри карточки.**
-Левая колонка — нынешний `column![search, list, counter, footer]`. Между
-колонками — вертикальная линия 1px цветом `outline_variant` (контейнер с
-фоном). Панель — `column![заголовок, scrollable(rows)]`: заголовок «Важные
-клавиши» размером 12 вторичным цветом (визуально отделяет колонку от списка),
-дальше компактные строки «title + keycaps» — те же `items::keycaps`, размеры
-как в левом списке (title 14, keycaps 11), но без `mouse_area`, без подсветки
-выделения и с меньшими вертикальными паддингами (4px вместо 6px). Отдельный
-`scrollable` с id `kbinds-overlay-cheatsheet` — колесо над панелью крутит
-панель, над списком список (iced разруливает по виджетам), программная
-прокрутка панели не нужна — новых `Message`-вариантов нет вообще.
+**D3. Layout: `row![левая_колонка, разделитель, панель]` inside the card.**
+The left column is the current `column![search, list, counter, footer]`.
+Between the columns — a 1px vertical line in the `outline_variant` color (a
+container with a background). The panel is `column![заголовок, scrollable(rows)]`: a «Важные клавиши» heading of size 12 in the secondary
+color (visually separates the column from the list), then compact
+"title + keycaps" rows — the same `items::keycaps`, sizes as in the left
+list (title 14, keycaps 11), but without `mouse_area`, without selection
+highlighting, and with smaller vertical padding (4px instead of 6px). A
+separate `scrollable` with id `kbinds-overlay-cheatsheet` — the wheel over
+the panel scrolls the panel, over the list the list (iced sorts it out per
+widget); programmatic scrolling of the panel is not needed — there are no
+new `Message` variants at all.
 
-**D4. Тема — только существующие роли.**
-Панель использует `surface` (фон карточки, единый), `on_surface`/
-`on_surface_variant` (текст), `outline_variant` (разделитель), keycap-стили как
-есть. Кэш noctalia и `~/.config/noctalia/templates/kbinds-overlay.json` не
-меняются. Альтернатива — чуть более тёмный фон панели (`surface_container_low`
-и т.п.) отвергнута: нового токена нет ни в кэше, ни в фолбэке §6.
+**D4. Theme — existing roles only.**
+The panel uses `surface` (the card background, shared), `on_surface`/
+`on_surface_variant` (text), `outline_variant` (separator), the keycap styles
+as is. The noctalia cache and
+`~/.config/noctalia/templates/kbinds-overlay.json` are not changed. The
+alternative — a slightly darker panel background (`surface_container_low` and
+similar) — was rejected: the new token exists neither in the cache nor in the
+§6 fallback.
 
-**D5. Порядок работ относительно mvp2.**
-Дельта «MODIFIED» требует, чтобы `center-overlay` уже был в main-спеках —
-перед apply этого change нужно заархивировать `kbinds-overlay-mvp2`
-(`/opsx:archive`), иначе `openspec validate` не найдёт модифицируемое
-требование. Порядок зафиксирован в proposal.md (Impact).
+**D5. Order of work relative to mvp2.**
+The "MODIFIED" delta requires `center-overlay` to already be in the main
+specs — before applying this change, `kbinds-overlay-mvp2` must be archived
+(`/opsx:archive`), otherwise `openspec validate` will not find the requirement
+to modify. The order is fixed in proposal.md (Impact).
 
 ## Risks / Trade-offs
 
-- [Расхождение вёрстки и хит-теста: клик «внутри» закрывает оверлей] → обе
-  стороны читают `items::card_rect(window, has_cheatsheet)`; юнит-тесты
-  геометрии для обоих значений флага (600 и 900).
-- [Дельта спеки ссылается на ещё не заархивированную capability] → архивация
-  mvp2 до apply (D5); до тех пор `validate` этого change ожидаемо ругается.
-- [На очень узком мониторе 92%-кэп сожмёт левую колонку до нечитаемости
-  (панель фиксирована 300px)] → целевая машина 2560×1440; в деградации
-  узких экранов смысла нет — зафиксировано как известное ограничение, не
-  обрабатываем.
-- [Кириллические длинные тайтлы переносятся и ломают ровность строк] →
-  как в левом списке: однострочный `text` без переноса, избыточная ширина
-  обрезается; на живом наборе (16 тайтлов) проверяется скриншотом.
+- [Layout and hit-test divergence: a click "inside" closes the overlay] → both
+  sides read `items::card_rect(window, has_cheatsheet)`; geometry unit tests
+  for both values of the flag (600 and 900).
+- [The spec delta references a capability not yet archived] → archive mvp2
+  before apply (D5); until then, `validate` of this change is expected to
+  complain.
+- [On a very narrow monitor the 92% cap will squeeze the left column into
+  unreadability (the panel is fixed at 300px)] → the target machine is
+  2560×1440; narrow-screen degradation makes no sense — recorded as a known
+  limitation, not handled.
+- [Long Cyrillic titles wrap and break the evenness of the rows] → as in the
+  left list: a single-line `text` without wrapping, excess width is clipped;
+  verified by screenshot on the live set (16 titles).
 
 ## Migration Plan
 
-Откат — revert коммита; данных и конфигов изменение не касается. Бинарь
-переустанавливается `cargo install --path .` как в MVP1/MVP2 (учесть обход
-сломанных rustup-прокси целевой машины — PATH к toolchains).
+Rollback — revert the commit; the change touches no data or configs. The
+binary is reinstalled with `cargo install --path .` as in MVP1/MVP2 (account
+for working around the target machine's broken rustup proxies — PATH to
+toolchains).
 
 ## Open Questions
 
-Нет: содержимое (бинды с `hotkey-overlay-title`) и read-only поведение
-зафиксированы пользователем при propose.
+None: the content (binds with `hotkey-overlay-title`) and the read-only
+behavior were fixed by the user at propose time.

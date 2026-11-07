@@ -2,98 +2,98 @@
 
 ## Purpose
 
-Разбор секции `binds` конфига niri (`config.kdl`) в полную машиночитаемую модель биндов: KDL-диалект, совместимый с парсером niri, поддержка `include`, канонизация комбо, человекочитаемое отображение клавиш (включая кириллицу) и детерминированная группировка. Модель — общий источник истины для всех команд `kbinds` и будущих интеграций (v2-оверлей).
+Parsing the `binds` section of the niri config (`config.kdl`) into a full machine-readable bind model: a KDL dialect compatible with the niri parser, `include` support, combo canonicalization, human-readable key display (including Cyrillic) and deterministic grouping. The model is the single source of truth for all `kbinds` commands and future integrations (the v2 overlay).
 
 ## ADDED Requirements
 
-### Requirement: Извлечение всех биндов из конфига
+### Requirement: Extract all binds from the config
 
-Инструмент SHALL извлекать все узлы-бинды из блока `binds { … }` файла `~/.config/niri/config.kdl` (путь по умолчанию, переопределяется `--config`), включая бинды, сплайсенные из `include`-файлов. Ни один бинд не SHALL быть пропущен или продублирован.
+The tool SHALL extract all bind nodes from the `binds { … }` block of the file `~/.config/niri/config.kdl` (the default path, overridden by `--config`), including binds spliced in from `include` files. No bind SHALL be skipped or duplicated.
 
-#### Scenario: Полное покрытие живого конфига
+#### Scenario: Full coverage of the live config
 
-- **WHEN** инструмент парсит живой конфиг пользователя (`~/.config/niri/config.kdl` со строкой `include "./noctalia.kdl"`)
-- **THEN** число распарсенных биндов совпадает с grep-эталоном по всем bind-строкам секции `binds` (159 на 2026-11-07; буквальный эталон ТЗ `grep -cE '^\s*Mod'` = 144 считает только Mod-бинды, остальные 15 — XF86/Alt/Ctrl/Print); любое расхождение — дефект парсера
+- **WHEN** the tool parses the user's live config (`~/.config/niri/config.kdl` with the line `include "./noctalia.kdl"`)
+- **THEN** the number of parsed binds matches the grep arbiter over all bind lines of the `binds` section (159 as of 2026-11-07; the literal SPEC arbiter `grep -cE '^\s*Mod'` = 144 counts only Mod-binds, the remaining 15 are XF86/Alt/Ctrl/Print); any mismatch is a parser defect
 
-#### Scenario: Все формы биндов парсятся
+#### Scenario: All bind forms parse
 
-- **WHEN** конфиг содержит блок-форму с телом (`Mod+Q repeat=false { close-window; }`), несколько атрибутов (`Mod+Space repeat=false hotkey-overlay-title="Switch layout" { switch-layout "next"; }`), spawn с аргументами, `spawn-sh`, комментарии `//` и `/* */`
-- **THEN** каждый случай распарсен: действия и атрибуты (`repeat`, `hotkey-overlay-title`) отражены в модели
+- **WHEN** the config contains a block form with a body (`Mod+Q repeat=false { close-window; }`), several attributes (`Mod+Space repeat=false hotkey-overlay-title="Switch layout" { switch-layout "next"; }`), spawn with arguments, `spawn-sh`, and `//` and `/* */` comments
+- **THEN** each case is parsed: the actions and attributes (`repeat`, `hotkey-overlay-title`) are reflected in the model
 
-### Requirement: Резолюция include
+### Requirement: Include resolution
 
-Инструмент SHALL резолвить `include "путь"` относительно каталога включающего файла и сплайсить его верхнеуровневые узлы на место включения. Циклическое включение SHALL приводить к ошибке парсинга (не к бесконечной рекурсии).
+The tool SHALL resolve `include "path"` relative to the directory of the including file and splice its top-level nodes at the point of inclusion. A cyclic include SHALL result in a parse error (not infinite recursion).
 
-#### Scenario: Относительный include
+#### Scenario: Relative include
 
-- **WHEN** `config.kdl` содержит `include "./noctalia.kdl"`
-- **THEN** файл читается относительно каталога `config.kdl`, его верхнеуровневые узлы участвуют в разборе; бинды из include попадают в модель с их собственными путями и строками
+- **WHEN** `config.kdl` contains `include "./noctalia.kdl"`
+- **THEN** the file is read relative to the directory of `config.kdl`, its top-level nodes participate in parsing; binds from the include enter the model with their own file paths and lines
 
-#### Scenario: Циклический include
+#### Scenario: Cyclic include
 
-- **WHEN** файл A включает B, а B включает A
-- **THEN** парсинг завершается ошибкой парсинга (код выхода 2), сообщение называет файл
+- **WHEN** file A includes B, and B includes A
+- **THEN** parsing fails with a parse error (exit code 2), the message names the file
 
-### Requirement: Модель бинда
+### Requirement: Bind model
 
-Каждый бинд SHALL содержать: все узлы-действия тела по порядку (`kind`: `builtin` | `spawn` | `spawn-sh`; для `builtin` — имя экшена, для `spawn`/`spawn-sh` — argv), флаг `repeat`, атрибут `hotkey-overlay-title`, исходные файл и строку, исходную запись клавиш `keys_raw`, канонический `combo`, отображение `keys_display`, группу и поле `search`.
+Each bind SHALL contain: all action nodes of the body in order (`kind`: `builtin` | `spawn` | `spawn-sh`; for `builtin` — the action name, for `spawn`/`spawn-sh` — argv), the `repeat` flag, the `hotkey-overlay-title` attribute, the source file and line, the original key entry `keys_raw`, the canonical `combo`, the `keys_display` mapping, the group, and the `search` field.
 
-#### Scenario: Бинд с несколькими действиями
+#### Scenario: Bind with multiple actions
 
-- **WHEN** бинд содержит два действия в теле
-- **THEN** модель хранит оба действия в порядке следования; выполнение в рамках `binds-cli` прогоняет оба
+- **WHEN** a bind contains two actions in its body
+- **THEN** the model stores both actions in order; execution within `binds-cli` runs both
 
-### Requirement: Толерантность к неизвестным конструкциям
+### Requirement: Tolerance of unknown constructs
 
-Неизвестные свойства и атрибуты бинда SHALL семантически игнорироваться (сохраняться в `raw` для аудита) — парсинг не SHALL падать на них; конструкции `XF86*`-клавиш и `condition` SHALL толерироваться.
+Unknown properties and attributes of a bind SHALL be semantically ignored (kept in `raw` for audit) — parsing SHALL NOT fail on them; `XF86*` key names and `condition` constructs SHALL be tolerated.
 
-#### Scenario: Неизвестное свойство не ломает парсинг
+#### Scenario: Unknown property does not break parsing
 
-- **WHEN** бинд содержит неизвестный инструменту атрибут или свойство (например, `condition { … }`, `cooldown-ms=100`)
-- **THEN** парсинг завершается успешно, свойство доступно в `raw`; клавиша `XF86AudioMute` парсится как обычная клавиша
+- **WHEN** a bind contains an attribute or property unknown to the tool (e.g., `condition { … }`, `cooldown-ms=100`)
+- **THEN** parsing succeeds and the property is available in `raw`; the key `XF86AudioMute` parses as a regular key
 
-### Requirement: Канонический combo
+### Requirement: Canonical combo
 
-`combo` SHALL быть каноническим ключом комбо: модификаторы в порядке `mod, ctrl, shift, alt`, клавиша в нижнем регистре, разделитель `+`. Одинаковые по смыслу записи SHALL давать одинаковый `combo`.
+`combo` SHALL be the canonical combo key: modifiers in the order `mod, ctrl, shift, alt`, the key in lowercase, separator `+`. Entries with the same meaning SHALL produce the same `combo`.
 
-#### Scenario: Канонизация
+#### Scenario: Canonicalization
 
-- **WHEN** бинд записан как `Mod+Shift+W`
-- **THEN** `combo` равен `mod+shift+w`
+- **WHEN** a bind is written as `Mod+Shift+W`
+- **THEN** `combo` equals `mod+shift+w`
 
-### Requirement: Человекочитаемое отображение клавиш
+### Requirement: Human-readable key display
 
-`keys_display` SHALL строиться из `keys_raw` по правилам: `Left/Right/Up/Down` → `←/→/↑/↓`, `Return` → `Enter`, `Slash` → `/`, `Cyrillic_*` → юникод-символ по эталонной таблице, зафиксированной из локального эталона (`/usr/include/X11/keysymdef.h` или `xkbcli how-to-type`; воспроизведение по памяти запрещено). Неизвестное имя клавиши SHALL отображаться в исходном виде без ошибки. `keys_raw` SHALL сохранять оригинал.
+`keys_display` SHALL be built from `keys_raw` by the rules: `Left/Right/Up/Down` → `←/→/↑/↓`, `Return` → `Enter`, `Slash` → `/`, `Cyrillic_*` → the Unicode character per the reference table captured from the local reference (`/usr/include/X11/keysymdef.h` or `xkbcli how-to-type`; reproducing from memory is forbidden). An unknown key name SHALL be displayed as-is without an error. `keys_raw` SHALL preserve the original.
 
-#### Scenario: Спецклавиши
+#### Scenario: Special keys
 
-- **WHEN** бинд содержит `Return`, `Left`, `Slash`
-- **THEN** `keys_display` содержит `Enter`, `←`, `/`
+- **WHEN** a bind contains `Return`, `Left`, `Slash`
+- **THEN** `keys_display` contains `Enter`, `←`, `/`
 
-#### Scenario: Кириллическая клавиша
+#### Scenario: Cyrillic key
 
-- **WHEN** бинд содержит `Mod+Cyrillic_ve`
-- **THEN** `keys_display` показывает символ `в` (U+0432, строчная — keysymdef.h), `keys_raw` сохраняет `Mod+Cyrillic_ve`
+- **WHEN** a bind contains `Mod+Cyrillic_ve`
+- **THEN** `keys_display` shows the character `в` (U+0432, lowercase — per keysymdef.h), `keys_raw` preserves `Mod+Cyrillic_ve`
 
-#### Scenario: Неизвестное имя клавиши
+#### Scenario: Unknown key name
 
-- **WHEN** бинд содержит имя клавиши, отсутствующее в таблице
-- **THEN** имя отображается в исходном виде, парсинг и остальные команды не падают
+- **WHEN** a bind contains a key name missing from the table
+- **THEN** the name is displayed as-is, parsing and the other commands do not fail
 
-### Requirement: Заголовок бинда
+### Requirement: Bind title
 
-Заголовок бинда SHALL выбираться по приоритету: атрибут `hotkey-overlay-title` → человекочитаемое имя экшена по словарю (`close-window` → «Закрыть окно»; неизвестные — сырая запись) → для `spawn` — команда строкой. Источник заголовка SHALL быть отражён (`title_source`).
+The bind title SHALL be selected by priority: the `hotkey-overlay-title` attribute → the human-readable action name from the dictionary (`close-window` → «Закрыть окно»; unknown actions — the raw entry) → for `spawn`, the command as a single string. The title source SHALL be reflected (`title_source`).
 
-#### Scenario: Приоритет заголовка
+#### Scenario: Title priority
 
-- **WHEN** бинд имеет `hotkey-overlay-title="Случайные обои"` и действие `spawn "noctalia" "msg" "wallpaper-random"`
-- **THEN** заголовок «Случайные обои», `title_source` = `overlay-title`
+- **WHEN** a bind has `hotkey-overlay-title="Случайные обои"` and the action `spawn "noctalia" "msg" "wallpaper-random"`
+- **THEN** the title is «Случайные обои», `title_source` = `overlay-title`
 
-### Requirement: Детерминированная группировка
+### Requirement: Deterministic grouping
 
-Каждый бинд SHALL быть отнесён к детерминированной группе по типу экшена (например, `close-window` → «Окна», действия воркспейсов → «Воркспейсы», spawn с лаунчером → «Система»); словарь заголовков экшенов SHALL быть общим для группировки и титулов. Группировка одного и того же бинда SHALL давать один и тот же результат между запусками.
+Each bind SHALL be assigned to a deterministic group by action type (e.g., `close-window` → «Окна», workspace actions → «Воркспейсы», spawn with a launcher → «Система»); the action title dictionary SHALL be shared between grouping and titles. Grouping of the same bind SHALL produce the same result between runs.
 
-#### Scenario: Стабильная группа
+#### Scenario: Stable group
 
-- **WHEN** `list` запускается дважды на одном конфиге
-- **THEN** группы всех биндов совпадают бин-в-бин; поле `search` содержит lowercase-конкатенацию заголовка, ключей, действий и группы
+- **WHEN** `list` is run twice on the same config
+- **THEN** the groups of all binds match one-to-one; the `search` field contains a lowercase concatenation of the title, keys, actions, and group

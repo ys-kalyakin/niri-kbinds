@@ -2,76 +2,76 @@
 
 ## Purpose
 
-CLI-интерфейс `kbinds`: команда `list` (включая машиночитаемый JSON) и команда `exec` (выполнение действий бинда через `niri msg action`, с `--dry-run`), единые коды выхода и обработка ошибок.
+The CLI interface of `kbinds`: the `list` command (including machine-readable JSON) and the `exec` command (executing bind actions via `niri msg action`, with `--dry-run`), uniform exit codes and error handling.
 
 ## ADDED Requirements
 
-### Requirement: Команда list
+### Requirement: The list command
 
-`kbinds list` SHALL выводить список биндов из конфига. С флагом `--json` вывод SHALL быть валидным JSON-массивом объектов с полями: `id`, `title`, `title_source`, `actions` (с `kind`, `name`, `cmd`), `keys_raw`, `keys_display`, `combo`, `group`, `repeat`, `overlay_title_present`, `file`, `line`, `search`. Без `--json` вывод SHALL быть человекочитаемым (id, клавиши, заголовок, группа).
+`kbinds list` SHALL print the list of binds from the config. With the `--json` flag the output SHALL be a valid JSON array of objects with the fields: `id`, `title`, `title_source`, `actions` (with `kind`, `name`, `cmd`), `keys_raw`, `keys_display`, `combo`, `group`, `repeat`, `overlay_title_present`, `file`, `line`, `search`. Without `--json` the output SHALL be human-readable (id, keys, title, group).
 
-#### Scenario: Валидный JSON
+#### Scenario: Valid JSON
 
-- **WHEN** выполняется `kbinds list --json` на непустом конфиге
-- **THEN** stdout парсится как JSON-массив; у каждого объекта заполнены `combo`, `keys_display`, `group`, `search`; запись отфильтровывается стандартным `jq`
+- **WHEN** `kbinds list --json` is run on a non-empty config
+- **THEN** stdout parses as a JSON array; every object has `combo`, `keys_display`, `group`, `search` filled; entries are filterable with standard `jq`
 
-#### Scenario: Сценарий фильтрации
+#### Scenario: Filtering scenario
 
-- **WHEN** выполняется `kbinds list --json | jq '.[] | select(.group=="Воркспейсы")'`
-- **THEN** вывод содержит только бинды группы «Воркспейсы»
+- **WHEN** `kbinds list --json | jq '.[] | select(.group=="Воркспейсы")'` is run
+- **THEN** the output contains only binds of the group «Воркспейсы» (Workspaces)
 
-### Requirement: Идентификатор бинда
+### Requirement: Bind identifier
 
-Каждый бинд SHALL иметь стабильный `id` — kebab-case форму канонического комбо (например, `mod+shift+w` → `mod-shift-w`), уникальный среди всех биндов модели (дубли комбо получают различимый суффикс).
+Each bind SHALL have a stable `id` — the kebab-case form of the canonical combo (e.g., `mod+shift+w` → `mod-shift-w`), unique across all binds of the model (duplicate combos get a distinguishing suffix).
 
-#### Scenario: Стабильность id между запусками
+#### Scenario: id stability across runs
 
-- **WHEN** `list --json` выполняется дважды на одном конфиге
-- **THEN** id каждого бинда одинаковы; `exec` по id из вывода `list` находит тот же бинд
+- **WHEN** `list --json` is run twice on the same config
+- **THEN** the ids of each bind are the same; `exec` with an id taken from the `list` output finds the same bind
 
-### Requirement: Команда exec
+### Requirement: The exec command
 
-`kbinds exec <id>` SHALL выполнять все действия бинда по порядку: `builtin` — через `niri msg action <имя> <аргументы…>`; `spawn`/`spawn-sh` — через `niri msg action spawn -- <argv…>` (синтаксис проверен: `niri msg action spawn -- <COMMAND>...`). `--dry-run` SHALL печатать команды в stdout и не выполнять ничего. Запуск exec не SHALL требовать сеть.
+`kbinds exec <id>` SHALL execute all actions of the bind in order: `builtin` — via `niri msg action <name> <args…>`; `spawn`/`spawn-sh` — via `niri msg action spawn -- <argv…>` (syntax verified: `niri msg action spawn -- <COMMAND>...`). `--dry-run` SHALL print the commands to stdout and execute nothing. Running exec SHALL NOT require network access.
 
-#### Scenario: Builtin через niri msg
+#### Scenario: Builtin via niri msg
 
-- **WHEN** выполняется `kbinds exec <id>` для бинда с `builtin`-действием
-- **THEN** вызывается `niri msg action <имя> <аргументы…>`
+- **WHEN** `kbinds exec <id>` is run for a bind with a `builtin` action
+- **THEN** `niri msg action <name> <args…>` is invoked
 
-#### Scenario: Spawn через niri msg spawn
+#### Scenario: Spawn via niri msg spawn
 
-- **WHEN** выполняется `kbinds exec <id>` для бинда с `spawn`-действием
-- **THEN** вызывается `niri msg action spawn -- <argv…>` в точности как записано в конфиге
+- **WHEN** `kbinds exec <id>` is run for a bind with a `spawn` action
+- **THEN** `niri msg action spawn -- <argv…>` is invoked exactly as written in the config
 
-#### Scenario: Несколько действий по порядку
+#### Scenario: Multiple actions in order
 
-- **WHEN** бинд содержит несколько действий и выполняется `kbinds exec <id>`
-- **THEN** действия выполняются в порядке следования в конфиге
+- **WHEN** a bind contains several actions and `kbinds exec <id>` is run
+- **THEN** the actions are executed in the order they appear in the config
 
-#### Scenario: Dry-run ничего не выполняет
+#### Scenario: Dry-run executes nothing
 
-- **WHEN** выполняется `kbinds exec mod-t --dry-run`
-- **THEN** в stdout печатается команда(ы) в точном виде запуска, побочных эффектов нет, код выхода 0
+- **WHEN** `kbinds exec mod-t --dry-run` is run
+- **THEN** the command(s) are printed to stdout exactly as they would be launched, there are no side effects, exit code 0
 
-### Requirement: Переопределение пути конфига
+### Requirement: Config path override
 
-Все команды SHALL принимать `--config PATH` (по умолчанию `~/.config/niri/config.kdl`).
+All commands SHALL accept `--config PATH` (default `~/.config/niri/config.kdl`).
 
-#### Scenario: Разбор фикстуры
+#### Scenario: Parsing a fixture
 
-- **WHEN** выполняется команда с `--config tests/fixtures/edge.kdl`
-- **THEN** разбор идёт по указанному файлу, `file` в модели указывает на него
+- **WHEN** a command is run with `--config tests/fixtures/edge.kdl`
+- **THEN** parsing reads the given file, and `file` in the model points to it
 
-### Requirement: Коды выхода и диагностика
+### Requirement: Exit codes and diagnostics
 
-Коды выхода: `0` — успех; `1` — находки audit при `--strict`; `2` — ошибка (IO, парсинг, неверное использование, неизвестный id в `exec`). Диагностика SHALL выводиться в stderr; stdout SHALL содержать только полезный вывод команды.
+Exit codes: `0` — success; `1` — audit findings under `--strict`; `2` — error (IO, parsing, invalid usage, unknown id in `exec`). Diagnostics SHALL be printed to stderr; stdout SHALL contain only the command's useful output.
 
-#### Scenario: Ошибка парсинга
+#### Scenario: Parse error
 
-- **WHEN** конфиг не существует или не парсится
-- **THEN** код выхода 2, сообщение об ошибке в stderr, stdout пуст
+- **WHEN** the config does not exist or does not parse
+- **THEN** exit code 2, an error message in stderr, stdout empty
 
-#### Scenario: Неизвестный id
+#### Scenario: Unknown id
 
-- **WHEN** выполняется `kbinds exec no-such-id`
-- **THEN** код выхода 2, сообщение в stderr перечисляет, что бинд не найден
+- **WHEN** `kbinds exec no-such-id` is run
+- **THEN** exit code 2, the message in stderr states that the bind was not found

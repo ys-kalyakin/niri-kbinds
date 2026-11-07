@@ -2,33 +2,33 @@
 
 ## Why
 
-Все пользовательские строки `kbinds` захардкожены: оверлей и диагностика — по-русски, CLI help — по-английски, аудит — по-русски (закреплено спекой `binds-audit`). При смене языка системы интерфейс остаётся на старом языке; смешение языков (русский UI поверх английской системы) выглядит незавершённо. Нужен единый механизм: язык выбирается по локали системы.
+All user-facing strings of `kbinds` are hardcoded: the overlay and diagnostics are in Russian, the CLI help is in English, the audit is in Russian (pinned by the `binds-audit` spec). When the system language changes, the interface stays in the old language; a language mix (a Russian UI on top of an English system) looks unfinished. A single mechanism is needed: the language is selected by the system locale.
 
 ## What Changes
 
-- Новый модуль локализации `l10n`: определение языка системы из окружения (`LC_ALL` → `LC_MESSAGES` → `LANG`), каталоги строк `ru` и `en`, fallback на `en`.
-- Локализуются все пользовательские поверхности:
-  - оверлей «Центр» («Поиск…», счётчик, футер-подсказка, «Важные клавиши»);
-  - CLI help всех команд и флагов (clap);
-  - диагностика ошибок (stderr-сообщения `lib.rs`, `exec.rs`, `fuzzel.rs`, `ui/app.rs`);
-  - находки `kbinds audit` в человекочитаемом виде;
-  - дефолтные заголовки и названия групп биндов (словарь `groups.rs`, ~84 экшена + группы «Окна», «Воркспейсы», «Навигация», «Скриншоты», «Система», «Программы», «Прочее»).
-- Не локализуются (намеренно): заголовки из конфига пользователя (`hotkey-overlay-title`, `title`), промпт fuzzel `binds> `, JSON-поля, `id`, `keys_display`, имена экшенов `niri msg`, комментарии в коде.
-- **BREAKING** (мягкая): значения `title`/`group` дефолтных биндов в выводе `kbinds list --json` становятся зависимыми от локали (схема JSON, поля, `id`, коды выходов не меняются). Пользовательские значения из конфига не меняются никогда.
+- A new localization module `l10n`: detecting the system language from the environment (`LC_ALL` → `LC_MESSAGES` → `LANG`), `ru` and `en` string catalogs, fallback to `en`.
+- All user-facing surfaces are localized:
+  - the "Center" overlay (the «Поиск…» placeholder, the counter, the footer hint, «Важные клавиши»);
+  - the CLI help of all commands and flags (clap);
+  - error diagnostics (the stderr messages of `lib.rs`, `exec.rs`, `fuzzel.rs`, `ui/app.rs`);
+  - `kbinds audit` findings in human-readable form;
+  - the default titles and group names of binds (the `groups.rs` dictionary, ~84 actions + the groups «Окна», «Воркспейсы», «Навигация», «Скриншоты», «Система», «Программы», «Прочее»).
+- Not localized (intentionally): titles from the user's config (`hotkey-overlay-title`, `title`), the fuzzel prompt `binds> `, JSON fields, `id`, `keys_display`, `niri msg` action names, code comments.
+- **BREAKING** (soft): the `title`/`group` values of default binds in the `kbinds list --json` output become locale-dependent (the JSON schema, fields, `id`, and exit codes do not change). User values from the config never change.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `localization`: выбор языка интерфейса по локали системы — правила определения локали, каталоги, fallback, охват поверхностей, гарантии стабильности (id, JSON-схема, коды выходов, промпт не зависят от языка).
+- `localization`: selecting the interface language by the system locale — locale detection rules, catalogs, fallback, surface coverage, stability guarantees (`id`, the JSON schema, exit codes, and the prompt do not depend on the language).
 
 ### Modified Capabilities
 
-- `center-overlay`: требования «Карточка „Центр“» и «Шпаргалка важных клавиш» закрепляли русский текст («Поиск…», «N из M биндов», футер, «Важные клавиши») — строки берутся из каталога локализации по языку системы.
-- `binds-audit`: требование «Вывод аудита» закреплял язык находок «на русском» — находки выводятся на языке локали системы.
+- `center-overlay`: the requirements «The "Center" card» and «Important-keys cheat sheet» pinned the Russian text («Поиск…», «N из M биндов», the footer, «Важные клавиши») — the strings are taken from the localization catalog according to the system language.
+- `binds-audit`: the «Audit output» requirement pinned the findings language to Russian — findings are printed in the system locale language.
 
 ## Impact
 
-- Код: новый `src/l10n.rs`; изменения в `src/groups.rs` (ключи групп + заголовки на двух языках), `src/main.rs` (clap help), `src/ui/app.rs`, `src/audit.rs`, `src/lib.rs`, `src/exec.rs`, `src/fuzzel.rs`; тесты (`src/ui/items.rs`, `src/parser.rs`, `src/audit.rs`, `tests/integration.rs`) — явная фиксация языка.
-- Зависимости: новых крейтов нет — каталоги строк статические, определение локали через `std::env`.
-- Спеки: изменения не затрагивают `binds-parsing`, `fuzzel-dmenu` (формат пунктов и промпт сохраняются), поведение exec, коды выходов и JSON-схему.
+- Code: a new `src/l10n.rs`; changes in `src/groups.rs` (group keys + titles in two languages), `src/main.rs` (clap help), `src/ui/app.rs`, `src/audit.rs`, `src/lib.rs`, `src/exec.rs`, `src/fuzzel.rs`; tests (`src/ui/items.rs`, `src/parser.rs`, `src/audit.rs`, `tests/integration.rs`) — explicit language fixation.
+- Dependencies: no new crates — the string catalogs are static, locale detection via `std::env`.
+- Specs: the changes do not affect `binds-parsing`, `fuzzel-dmenu` (the item format and the prompt are preserved), exec behavior, exit codes, or the JSON schema.

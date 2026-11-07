@@ -2,27 +2,27 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Карточка «Центр»
+### Requirement: The "Center" card
 
-Поверх затемнения SHALL отображаться карточка по центру фокусного монитора из двух колонок: слева — поле поиска с автофокусом, сгруппированный список биндов (состав групп и их порядок — как в MVP1 `groups`), строки «title + keycaps», счётчик видимых биндов и футер-подсказка управления; справа — шпаргалка важных клавиш (требование «Шпаргалка важных клавиш»). Тексты счётчика (формат «N из M» + слово «биндов») и футера (подсказки выбора, выполнения и закрытия), а также плейсхолдер поля поиска SHALL браться из каталога локализации по языку системы (capability `localization`): при `ru` — «N из M биндов» и `↑↓ выбор · Enter выполнить · Esc закрыть`, при `en` — их английские эквиваленты. Ширина карточки 900px (не более 92% ширины монитора), радиус 20, тёмный фон, светлая граница, тень.
+Above the scrim SHALL be displayed a card in the center of the focused monitor with two columns: on the left — a search field with autofocus, a grouped list of binds (group composition and their order — as in MVP1 `groups`), rows of "title + keycaps", a counter of visible binds, and a footer control hint; on the right — the important-keys cheat sheet (requirement "Important-keys cheat sheet"). The counter texts (the "N из M" format + the word «биндов») and the footer (hints for selection, execution, and closing), as well as the search field placeholder, SHALL be taken from the localization catalog according to the system language (capability `localization`): under `ru` — «N из M биндов» and `↑↓ выбор · Enter выполнить · Esc закрыть`, under `en` — their English equivalents. Card width 900px (no more than 92% of the monitor width), radius 20, dark background, light border, shadow.
 
-#### Scenario: Состав карточки на живом конфиге
+#### Scenario: Card composition on the live config
 
-- **WHEN** запуск на живом конфиге с пустым запросом
-- **THEN** карточка из двух колонок: слева поле поиска в фокусе, группы в порядке MVP1, строки с keycaps, счётчик «M из M биндов» (текст — по каталогу локализации; M — общее число биндов, разобранных MVP1-парсером) и футер-подсказка; справа шпаргалка важных клавиш
+- **WHEN** running on the live config with an empty query
+- **THEN** a two-column card: on the left a focused search field, groups in MVP1 order, rows with keycaps, the counter «M из M биндов» (the text per the localization catalog; M — the total number of binds parsed by the MVP1 parser) and the footer hint; on the right the important-keys cheat sheet
 
-#### Scenario: Нет важных клавиш — одноколоночная карточка
+#### Scenario: No important keys — single-column card
 
-- **GIVEN** конфиг без единого `hotkey-overlay-title`
-- **WHEN** запуск оверлея
-- **THEN** правая колонка не отображается, карточка одноколоночная шириной 600px — вид как до появления шпаргалки
+- **GIVEN** a config without a single `hotkey-overlay-title`
+- **WHEN** running the overlay
+- **THEN** the right column is not displayed, the card is single-column with width 600px — the look as before the cheat sheet appeared
 
-#### Scenario: Русская локаль
+#### Scenario: Russian locale
 
-- **WHEN** оверлей открыт при `LANG=ru_RU.UTF-8`
-- **THEN** счётчик имеет вид «N из M биндов», футер — `↑↓ выбор · Enter выполнить · Esc закрыть`, плейсхолдер — «Поиск…»
+- **WHEN** the overlay is opened under `LANG=ru_RU.UTF-8`
+- **THEN** the counter reads «N из M биндов», the footer is `↑↓ выбор · Enter выполнить · Esc закрыть`, the placeholder is «Поиск…»
 
-#### Scenario: Английская локаль
+#### Scenario: English locale
 
-- **WHEN** оверлей открыт при `LC_ALL=en_US.UTF-8`
-- **THEN** счётчик и футер показаны английскими эквивалентами из каталога; раскладка, размеры и поведение карточки не меняются
+- **WHEN** the overlay is opened under `LC_ALL=en_US.UTF-8`
+- **THEN** the counter and footer are shown with the English equivalents from the catalog; the layout, sizes, and behavior of the card do not change

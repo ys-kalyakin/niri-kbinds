@@ -2,57 +2,57 @@
 
 ## Purpose
 
-Статический анализ разобранной модели биндов: конфликты комбинаций, бинды, невидимые в штатном PNG-оверлее, и отсутствующие бинды распространённых экшенов niri. Ответ на вопрос «почему лаунчер ведёт себя странно?» без чтения 144 строк конфига.
+Static analysis of the parsed bind model: combo conflicts, binds invisible in the stock PNG overlay, and missing binds of common niri actions. An answer to "why does the launcher behave strangely?" without reading 144 config lines.
 
 ## ADDED Requirements
 
-### Requirement: A1 — дублированный combo
+### Requirement: A1 — duplicated combo
 
-Правило A1 (уровень `error`): один и тот же канонический `combo` назначен действиям с разными командами. Находка SHALL перечислять все варианты бинда с файлом и строкой каждого, не утверждая, какой бинд «побеждает» (по исходникам niri 26.04 конфиг с дублем отвергается целиком — notes задачи 5.1). Один и тот же экшен на разных клавишах находкой НЕ является.
+Rule A1 (level `error`): the same canonical `combo` is assigned to actions with different commands. The finding SHALL list every bind variant with its file and line, without claiming which bind "wins" (per the niri 26.04 sources a config with a duplicate is rejected entirely — the notes of task 5.1). The same action on different keys is NOT a finding.
 
-#### Scenario: Реальный конфликт обнаружен
+#### Scenario: A real conflict is detected
 
-- **WHEN** `kbinds audit` запущен на живом конфиге, где `Mod+D` назначен дважды на разные команды (`noctalia msg panel-toggle launcher` и `vicinae toggle`)
-- **THEN** находка уровня `error` перечисляет оба бинда с их файлами и строками и не называет победителя
+- **WHEN** `kbinds audit` runs on a live config where `Mod+D` is assigned twice to different commands (`noctalia msg panel-toggle launcher` and `vicinae toggle`)
+- **THEN** an `error`-level finding lists both binds with their files and lines and names no winner
 
-#### Scenario: Один экшен на разных клавишах — не конфликт
+#### Scenario: One action on different keys is not a conflict
 
-- **WHEN** конфиг содержит `Mod+Left` и `Mod+H` с одним экшеном `focus-column-left`
-- **THEN** A1 не сообщает о конфликте
+- **WHEN** the config contains `Mod+Left` and `Mod+H` with the same action `focus-column-left`
+- **THEN** A1 reports no conflict
 
-### Requirement: A2 — бинд, невидимый в оверлее
+### Requirement: A2 — a bind invisible in the overlay
 
-Правило A2 SHALL выдавать находку уровня `warn` для бинда без `hotkey-overlay-title`, у которого нет человекочитаемого имени из словаря (кастомный `spawn`/`spawn-sh` или builtin вне словаря) — такой бинд не виден осмысленно в штатном PNG-оверлее. Builtin-бинды без overlay-title, чьё имя есть в словаре (niri подставляет дефолтный title), предупреждающими не являются.
+Rule A2 SHALL emit a `warn`-level finding for a bind without `hotkey-overlay-title` that has no human-readable dictionary name (a custom `spawn`/`spawn-sh` or an out-of-dictionary builtin) — such a bind is not meaningfully visible in the stock PNG overlay. Builtin binds without an overlay-title whose name is in the dictionary (niri substitutes a default title) are not warnings.
 
-#### Scenario: Spawn без overlay-title
+#### Scenario: Spawn without an overlay title
 
-- **WHEN** конфиг содержит `spawn`-бинд без `hotkey-overlay-title`
-- **THEN** аудит даёт находку `warn` с файлом, строкой и командой бинда
+- **WHEN** the config contains a `spawn` bind without `hotkey-overlay-title`
+- **THEN** the audit emits a `warn` finding with the bind's file, line, and command
 
-#### Scenario: Builtin со словарным именем
+#### Scenario: Builtin with a dictionary name
 
-- **WHEN** конфиг содержит `Mod+Q { close-window; }` без `hotkey-overlay-title`
-- **THEN** A2 не даёт находки (имя из словаря: «Закрыть окно»)
+- **WHEN** the config contains `Mod+Q { close-window; }` without `hotkey-overlay-title`
+- **THEN** A2 emits no finding (the name is in the dictionary: «Закрыть окно» / "Close window")
 
-### Requirement: A3 — распространённые экшены без бинда
+### Requirement: A3 — common actions with no bind
 
-Правило A3 SHALL выдавать находку уровня `info` для распространённых экшенов niri (статический список ~20–30 в коде: скриншоты, `toggle-window-floating`, `consume-or-expel-window-*` и т.п.), для которых в конфиге нет ни одного бинда. Правило является nice-to-have: его отсутствие не блокирует остальной аудит.
+Rule A3 SHALL emit an `info`-level finding for common niri actions (a static list of ~20–30 in code: screenshots, `toggle-window-floating`, `consume-or-expel-window-*`, etc.) that have no bind at all in the config. The rule is a nice-to-have: its absence does not block the rest of the audit.
 
-#### Scenario: Экшен без бинда
+#### Scenario: An action with no bind
 
-- **WHEN** в конфиге нет ни одного бинда на экшен из списка A3
-- **THEN** аудит даёт находку `info` с именем экшена
+- **WHEN** the config has no bind for an action from the A3 list
+- **THEN** the audit emits an `info` finding with the action name
 
-### Requirement: Вывод аудита
+### Requirement: Audit output
 
-`kbinds audit` SHALL выводить находки в человекочитаемом виде (на русском), с `--json` — машиночитаемый список находок (id правила, уровень, сообщение, ссылки на бинды). С `--strict` и наличием хотя бы одной находки `error` код выхода SHALL быть 1; без `--strict` — 0 при любых находках. На конфиге без находок аудит SHALL давать ноль находок и код 0.
+`kbinds audit` SHALL print findings in a human-readable form (in Russian), and with `--json` a machine-readable list of findings (rule id, level, message, bind references). With `--strict` and at least one `error` finding the exit code SHALL be 1; without `--strict` — 0 regardless of findings. On a config without findings the audit SHALL yield zero findings and code 0.
 
-#### Scenario: Strict-режим
+#### Scenario: Strict mode
 
-- **WHEN** `kbinds audit --strict` запущен на живом конфиге с конфликтом `Mod+D`
-- **THEN** код выхода 1, находка `error` выведена в stdout или stderr согласно обычному выводу
+- **WHEN** `kbinds audit --strict` runs on the live config with the `Mod+D` conflict
+- **THEN** exit code 1, the `error` finding printed to stdout or stderr per the normal output
 
-#### Scenario: Негативный тест
+#### Scenario: Negative test
 
-- **WHEN** `kbinds audit` запущен на фикстуре без находок (`clean.kdl`)
-- **THEN** ноль находок, код выхода 0
+- **WHEN** `kbinds audit` runs on a fixture without findings (`clean.kdl`)
+- **THEN** zero findings, exit code 0

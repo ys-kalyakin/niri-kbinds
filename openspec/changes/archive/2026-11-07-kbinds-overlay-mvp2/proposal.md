@@ -2,34 +2,34 @@
 
 ## Why
 
-MVP1 даёт данные и исполнение биндов (CLI, fuzzel-dmenu), но шпаргалка остаётся текстовой: пользователь должен читать список, а не видеть его. Утверждённый макет `mockup.html` («Центр») задаёт графический оверлей — layer-shell поверхность с поиском, группами и keycaps, закрывающая сценарий «посмотрел → нашёл → выполнил». GTK-стек недоступен (нет devel-пакетов, sudo закрыт), поэтому стек зафиксирован как `iced` + `iced_layershell` 0.19.1 (чистый Rust, только crates.io).
+MVP1 provides the data and the execution of binds (CLI, fuzzel-dmenu), but the cheat sheet remains textual: the user has to read a list instead of seeing it. The approved `mockup.html` mockup («Центр» / "Center") defines a graphical overlay — a layer-shell surface with search, groups, and keycaps — covering the "look → find → execute" scenario. The GTK stack is unavailable (no devel packages, sudo is closed), so the stack is fixed as `iced` + `iced_layershell` 0.19.1 (pure Rust, crates.io only).
 
 ## What Changes
 
-- Новый бинарь `kbinds-overlay` (второй `[[bin]]` в крейте `niri-kbinds`): `kbinds overlay [--config PATH] [--dry-run] [--mode center]`.
-- Новая surface-часть UI: layer-shell слой `overlay`, keyboard interactivity `exclusive`, полноэкранное затемнение на фокусном мониторе (`niri msg focused-output --json` при старте).
-- Карточка «Центр» по макету: поиск с автофокусом, сгруппированный список (группы и порядок — как MVP1 `groups`), keycaps из `keys_display`, счётчик «N из M биндов», футер-подсказка.
-- Навигация: `↑/↓` циклично, `Enter` — выполнить и закрыть, `Esc` / клик вне карточки — закрыть, клик по строке — выполнить, прокрутка колесом.
-- `--dry-run`: команда бинда печатается в **stderr** (в отличие от `kbinds exec --dry-run`, который печатает в stdout), ничего не выполняется, оверлей закрывается.
-- Новые зависимости: `iced`, `iced_layershell` 0.19.1 (+ их дерево); системных devel-пакетов не требуется.
-- README: установка, бинд `Mod+Shift+/` в niri, скриншот оверлея, отличия от `kbinds dmenu`.
-- Fuzzel-адаптер и CLI-команды MVP1 не меняются.
+- A new binary `kbinds-overlay` (a second `[[bin]]` in the `niri-kbinds` crate): `kbinds overlay [--config PATH] [--dry-run] [--mode center]`.
+- A new surface part of the UI: an `overlay` layer-shell layer, keyboard interactivity `exclusive`, a fullscreen scrim on the focused monitor (`niri msg focused-output --json` at startup).
+- A «Центр» ("Center") card per the mockup: a search field with autofocus, a grouped list (groups and their order — as in MVP1 `groups`), keycaps from `keys_display`, a «N из M биндов» counter, a footer hint.
+- Navigation: `↑/↓` cyclically, `Enter` — execute and close, `Esc` / a click outside the card — close, a click on a row — execute, mouse-wheel scrolling.
+- `--dry-run`: the bind's command is printed to **stderr** (unlike `kbinds exec --dry-run`, which prints to stdout), nothing is executed, the overlay closes.
+- New dependencies: `iced`, `iced_layershell` 0.19.1 (+ their dependency trees); no system devel packages required.
+- README: installation, the `Mod+Shift+/` bind in niri, an overlay screenshot, differences from `kbinds dmenu`.
+- The MVP1 fuzzel adapter and CLI commands are unchanged.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `center-overlay`: графический оверлей «Центр» — layer-shell поверхность поверх рабочего стола с затемнением, карточкой поиска, сгруппированным списком биндов, клавиатурной и мышиной навигацией, выполнением выбранного бинда через MVP1 `exec` и режимом `--dry-run`.
+- `center-overlay`: the graphical «Центр» ("Center") overlay — a layer-shell surface above the desktop with a scrim, a search card, a grouped list of binds, keyboard and mouse navigation, execution of the selected bind through MVP1 `exec`, and a `--dry-run` mode.
 
 ### Modified Capabilities
 
-(нет — поведение MVP1 (`binds-parsing`, `binds-cli`, `binds-audit`, `fuzzel-dmenu`) не меняется; `kbinds-overlay` переиспользует библиотечные модули как есть)
+(none — MVP1 behavior (`binds-parsing`, `binds-cli`, `binds-audit`, `fuzzel-dmenu`) is unchanged; `kbinds-overlay` reuses the library modules as is)
 
 ## Impact
 
-- **Cargo.toml**: +2 зависимости (`iced`, `iced_layershell` 0.19.1), +1 `[[bin]]` `kbinds-overlay`.
-- **Новый код**: `src/bin/overlay.rs` (аргументы, запуск UI), `src/ui/{app,items,theme}.rs` (состояние iced, pure-функции фильтрации, палитра).
-- **Переиспользуется без изменений**: `parser`, `model`, `groups`, `exec` (`action_argv` + `display_command` — публичны; dry-run оверлея печатает в stderr, поэтому `exec_bind` напрямую не вызывается в dry-run-режиме), `keys_display`.
-- **README.md**: раздел про оверлей + скриншот.
-- **Конфиг niri пользователя**: бинд `Mod+Shift+/` (+ дубль `Mod+Shift+backslash` для ru-раскладки) → `spawn "kbinds" "overlay"`; по решению пользователя штатный `show-hotkey-overlay` переносится на свободный `Mod+Shift+U` (дубль комбо niri отверг бы целиком) (M5).
-- **Риски**: API `iced_layershell` 0.19 (слой/якоря/exclusive-клавиатура/прозрачность фона) — арбитр этап M1; если крейт блокирует, вернуться с фактами и вариантами, не меняя стек молча.
+- **Cargo.toml**: +2 dependencies (`iced`, `iced_layershell` 0.19.1), +1 `[[bin]]` `kbinds-overlay`.
+- **New code**: `src/bin/overlay.rs` (arguments, UI launch), `src/ui/{app,items,theme}.rs` (iced state, pure filtering functions, palette).
+- **Reused without changes**: `parser`, `model`, `groups`, `exec` (`action_argv` + `display_command` — public; the overlay's dry-run prints to stderr, so `exec_bind` is not called directly in dry-run mode), `keys_display`.
+- **README.md**: an overlay section + a screenshot.
+- **The user's niri config**: a `Mod+Shift+/` bind (+ a duplicate `Mod+Shift+backslash` for the ru layout) → `spawn "kbinds" "overlay"`; per the user's decision the stock `show-hotkey-overlay` moves to the free `Mod+Shift+U` (niri would reject a duplicate combo entirely) (M5).
+- **Risks**: the `iced_layershell` 0.19 API (layer/anchors/exclusive keyboard/background transparency) — M1 is the arbiter; if the crate blocks, come back with facts and options instead of silently changing the stack.

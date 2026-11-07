@@ -2,39 +2,39 @@
 
 ## Why
 
-Единственная шпаргалка биндов в niri 26.04 — статический PNG от `show-hotkey-overlay`: нет поиска, нельзя выполнить действие, не видны конфликты и реальные команды. В конфиге пользователя 144 бинда (40 — с кириллическими клавишами), сканировать картинку глазами нереально; уже есть реальный конфликт (`Mod+D` назначен дважды), который оверлей не показывает. Нужен инструмент, у которого источник истины — сам `config.kdl` (единственный: `niri msg` список биндов не отдаёт).
+The only bind cheatsheet in niri 26.04 is a static PNG from `show-hotkey-overlay`: no search, no way to execute an action, conflicts and real commands are invisible. The user's config has 144 binds (40 with Cyrillic keys); scanning a picture by eye is unrealistic; there is already a real conflict (`Mod+D` assigned twice) that the overlay does not show. A tool is needed whose source of truth is `config.kdl` itself (the only one: `niri msg` does not expose the bind list).
 
 ## What Changes
 
-Создаётся CLI-инструмент `kbinds` (Rust, один статический бинарь, новый крейт `niri-kbinds` в корне репозитория):
+A CLI tool `kbinds` is created (Rust, one static binary, new crate `niri-kbinds` at the repository root):
 
-- Парсер секции `binds` из `~/.config/niri/config.kdl`: поддержка `include` (относительное разрешение, защита от циклов), KDL-диалект, совместимый с тем, чем парсит niri 26.04 (knuffel 3.2 / KDL v1), толерантность к неизвестным свойствам.
-- Полная модель бинда (serde): actions (builtin/spawn/spawn-sh), канонический `combo`, `keys_display` (стрелки, Enter, кириллица по эталонной таблице), группировка, поле `search`.
-- `kbinds list [--json]` — машиночитаемый список (JSON-схема §6 ТЗ).
-- `kbinds exec <id> [--dry-run]` — выполнение действий через `niri msg action` (синтаксис `spawn -- <COMMAND>...` проверен на целевой машине).
-- `kbinds dmenu` — интерактивный поиск через fuzzel (`--dmenu`): нашёл → Enter → выполнено.
-- `kbinds audit [--json] [--strict]` — правила A1 (дублированный combo, error), A2 (бинд без overlay-title, warn), A3 (niri-экшены без бинда, info, nice-to-have).
-- Фикстуры и тесты (unit + integration), README (установка, бинд в niri, сценарии использования).
+- Parser of the `binds` section of `~/.config/niri/config.kdl`: `include` support (relative resolution, cycle protection), a KDL dialect compatible with what niri 26.04 parses with (knuffel 3.2 / KDL v1), tolerance of unknown properties.
+- Full bind model (serde): actions (builtin/spawn/spawn-sh), canonical `combo`, `keys_display` (arrows, Enter, Cyrillic per the reference table), grouping, a `search` field.
+- `kbinds list [--json]` — machine-readable list (JSON schema §6 of the SPEC).
+- `kbinds exec <id> [--dry-run]` — action execution via `niri msg action` (the `spawn -- <COMMAND>...` syntax verified on the target machine).
+- `kbinds dmenu` — interactive search via fuzzel (`--dmenu`): found → Enter → executed.
+- `kbinds audit [--json] [--strict]` — rules A1 (duplicated combo, error), A2 (bind without overlay-title, warn), A3 (niri actions with no bind, info, nice-to-have).
+- Fixtures and tests (unit + integration), README (installation, the niri bind, usage scenarios).
 
-Не-цели (зафиксированы ТЗ): layer-shell GUI-оверлей (v2), редактирование config.kdl, waybar-модуль, daemon, поддержка других композиторов. Vicinae-адаптер — отдельное исследование, не блокирует MVP (исход либо адаптер, либо задокументированное «не поддерживается» в README).
+Non-goals (fixed by the SPEC): a layer-shell GUI overlay (v2), editing config.kdl, a waybar module, a daemon, other compositors. A Vicinae adapter is a separate investigation, not blocking the MVP (the outcome is either an adapter or a documented "not supported" note in the README).
 
 ## Capabilities
 
 ### New Capabilities
 
-- `binds-parsing`: разбор `config.kdl` в полную модель биндов — KDL-диалект niri, `include` с защитой от циклов, канонизация комбо, отображение клавиш (кириллица по эталонной таблице), детерминированная группировка, поле поиска. Переиспользуется будущим v2-оверлеем.
-- `binds-cli`: команды `list --json` и `exec` — JSON-схема бинда, выполнение действий через `niri msg action`, `--dry-run`, коды выхода и диагностика в stderr.
-- `fuzzel-dmenu`: интерактивный поиск по биндам через fuzzel dmenu-протокол с выполнением выбранного бинда.
-- `binds-audit`: статический анализ конфига — конфликты комбинаций, бинды, невидимые в штатном PNG-оверлее, отсутствующие бинды распространённых экшенов.
+- `binds-parsing`: parsing `config.kdl` into a full bind model — the niri KDL dialect, `include` with cycle protection, combo canonicalization, key display (Cyrillic per the reference table), deterministic grouping, a search field. Reused by the future v2 overlay.
+- `binds-cli`: the `list --json` and `exec` commands — the bind JSON schema, action execution via `niri msg action`, `--dry-run`, exit codes and stderr diagnostics.
+- `fuzzel-dmenu`: interactive search over binds via the fuzzel dmenu protocol with execution of the selected bind.
+- `binds-audit`: static analysis of the config — combo conflicts, binds invisible in the stock PNG overlay, missing binds of common actions.
 
 ### Modified Capabilities
 
-_(нет — проект зелёное поле, существующих спецификаций нет)_
+_(none — greenfield project, no existing specifications)_
 
 ## Impact
 
-- **Новый код:** крейт `niri-kbinds` в корне (`Cargo.toml`, `src/`, `tests/`, `README.md`).
-- **Зависимости (runtime):** `clap` v4, `kdl` (версия — см. design; диалект должен разбирать живой конфиг), `serde` + `serde_json`, `anyhow`.
-- **Окружение:** Rust toolchain stable (на машине rustup-прокси сломаны — вызывать тулчейн напрямую из `~/.rustup/toolchains/*/bin`, проверено ТЗ); crates.io при первой сборке.
-- **Внешние интерфейсы:** чтение `~/.config/niri/config.kdl` (+ include), `niri msg action`, fuzzel dmenu-протокол. Сеть не требуется.
-- **Риск приёмки:** число биндов на живом конфиге должно совпасть с `grep`-эталоном (144/144) — расхождение блокирует приёмку.
+- **New code:** the `niri-kbinds` crate at the root (`Cargo.toml`, `src/`, `tests/`, `README.md`).
+- **Dependencies (runtime):** `clap` v4, `kdl` (version — see design; the dialect must parse the live config), `serde` + `serde_json`, `anyhow`.
+- **Environment:** Rust stable toolchain (rustup proxies are broken on the machine — invoke the toolchain directly from `~/.rustup/toolchains/*/bin`, verified by the SPEC); crates.io on the first build.
+- **External interfaces:** reading `~/.config/niri/config.kdl` (+ includes), `niri msg action`, the fuzzel dmenu protocol. No network required.
+- **Acceptance risk:** the bind count on the live config must match the `grep` arbiter (144/144) — any mismatch blocks acceptance.

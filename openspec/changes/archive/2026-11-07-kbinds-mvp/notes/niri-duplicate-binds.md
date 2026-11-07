@@ -1,31 +1,30 @@
-# Исследование: семантика дублированного combo в niri 26.04 (задача 5.1, ТЗ §14.5)
+# Research: duplicated-combo semantics in niri 26.04 (task 5.1, SPEC §14.5)
 
-Метод: чтение исходников niri v26.04 (git clone --branch v26.04, sparse: niri-config), без экспериментов на живой сессии.
+Method: reading the niri v26.04 sources (git clone --branch v26.04, sparse: niri-config), no experiments on the live session.
 
-## Вывод
+## Conclusion
 
-- `niri-config/src/binds.rs` (~строки 775–805): при декодировании блока `binds` niri ведёт
-  `seen_keys: HashMap<Key, _>`; повторный узел с тем же ключом даёт **две ошибки** декодирования:
-  «keybind first defined here» (на первом) и «duplicate keybind later defined here» (на втором).
-- Эти ошибки попадают в контекст разбора (`ctx.emit_error`) и делают
-  `ConfigParseResult.config = Err` (`niri-config/src/error.rs`): **конфиг отвергается целиком**.
-  niri продолжает держать последний валидный конфиг (или дефолтный) и показывает диалог ошибки
-  конфигурации.
+- `niri-config/src/binds.rs` (~lines 775–805): when decoding the `binds` block niri keeps
+  a `seen_keys: HashMap<Key, _>`; a second node with the same key produces **two decode errors**:
+  «keybind first defined here» (on the first) and «duplicate keybind later defined here» (on the second).
+- These errors go into the parse context (`ctx.emit_error`) and make
+  `ConfigParseResult.config = Err` (`niri-config/src/error.rs`): **the config is rejected entirely**.
+  niri keeps running the last valid config (or the default one) and shows a config-error dialog.
 
-## Следствия для аудита
+## Consequences for the audit
 
-- Ни один из дублирующихся биндов «не побеждает» — конфиг с дублем не применяется вообще.
-  Формулировка находки A1 поэтому остаётся нейтральной к «победителю» (как требует спека):
-  она перечисляет все варианты с файлами и строками, не называя действующий.
-- Уточнение формулировки A1 не потребовалось: нейтральный текст совместим с выясненной
-  семантикой. Спека `binds-audit` обновлена только в мотивировочной части
-  («семантика не проверялась» → «проверена чтением исходников: niri отвергает конфиг целиком»),
-  нормативная часть без изменений.
+- Neither of the duplicate binds "wins" — a config with a duplicate is not applied at all.
+  The A1 finding wording therefore stays winner-neutral (as the spec requires):
+  it lists every variant with files and lines without naming the active one.
+- No A1 wording change was needed: the neutral text is compatible with the established
+  semantics. The `binds-audit` spec was updated only in its motivation part
+  ("semantics not verified" → "verified by source reading: niri rejects the config entirely");
+  the normative part is unchanged.
 
-## Отклонение факта от ТЗ (зафиксировано)
+## Fact deviation from the SPEC (recorded)
 
-- ТЗ §2: «Реальный конфликт в конфиге: `Mod+D` назначен дважды». В текущем живом конфиге
-  второй бинд (`vicinae toggle`, строка 213) **закомментирован** — активного конфликта больше нет
-  (проверено: активных дублированных combo в конфиге ноль). Критерий приёмки §15.6 про «аудит
-  находит Mod+D на живом конфиге» проверяется на фикстуре `tests/fixtures/conflict.kdl`;
-  на живом конфиге аудит обязан давать ноль error-находок (exit 0 даже с `--strict`).
+- SPEC §2: "A real conflict in the config: `Mod+D` is assigned twice". In the current live config
+  the second bind (`vicinae toggle`, line 213) is **commented out** — there is no active conflict anymore
+  (verified: zero active duplicated combos in the config). The §15.6 acceptance criterion about "the audit
+  finds Mod+D on the live config" is checked against the `tests/fixtures/conflict.kdl` fixture;
+  on the live config the audit must yield zero error-level findings (exit 0 even with `--strict`).

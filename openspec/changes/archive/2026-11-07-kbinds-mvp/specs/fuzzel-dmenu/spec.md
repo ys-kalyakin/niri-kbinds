@@ -2,43 +2,43 @@
 
 ## Purpose
 
-Интерактивный поиск по хоткеям через fuzzel в режиме dmenu: список биндов подаётся на stdin, выбранный пункт выполняется по Enter («нашёл → выполнил» вместо «прочитал PNG → вспомнил комбо → нажал»).
+Interactive hotkey search via fuzzel in dmenu mode: the bind list is fed to stdin, the selected item is executed on Enter ("find → execute" instead of "read the PNG → recall the combo → press").
 
 ## ADDED Requirements
 
-### Requirement: Пункты меню
+### Requirement: Menu items
 
-`kbinds dmenu` SHALL запускать `fuzzel --dmenu -p "binds> "`, подать на stdin по одному пункту на бинд в формате `<keys_display> — <title>` (пункт SHALL включать имя действия, чтобы fuzzel искал по нему), читать выбор из stdout fuzzel.
+`kbinds dmenu` SHALL launch `fuzzel --dmenu -p "binds> "`, feed one item per bind to stdin in the format `<keys_display> — <title>` (the item SHALL include the action name so fuzzel can search by it), and read the selection from fuzzel's stdout.
 
-#### Scenario: Формат пунктов
+#### Scenario: Item format
 
-- **WHEN** dmenu запущен на конфиге с биндом `Mod+Shift+W` («Случайные обои»)
-- **THEN** один из пунктов stdin содержит `Mod+Shift+W — Случайные обои` и имя действия; переносы строк внутри пункта санитизированы (заменены так, чтобы пункт оставался одной строкой)
+- **WHEN** dmenu is run on a config with the bind `Mod+Shift+W` («Случайные обои»)
+- **THEN** one of the stdin items contains `Mod+Shift+W — Случайные обои` and the action name; line breaks inside an item are sanitized (replaced so that the item remains a single line)
 
-### Requirement: Выполнение выбранного бинда
+### Requirement: Executing the selected bind
 
-Выбранный пункт SHALL быть отображён обратно на бинд и выполнен так же, как `kbinds exec <id>` (все действия по порядку). Esc или пустой вывод fuzzel SHALL завершать работу с кодом 0 без выполнения действий.
+The selected item SHALL be mapped back to the bind and executed exactly like `kbinds exec <id>` (all actions in order). Esc or empty fuzzel output SHALL terminate with code 0 without executing any action.
 
-#### Scenario: Enter выполняет действие
+#### Scenario: Enter executes the action
 
-- **WHEN** пользователь нашёл бинд поиском и нажал Enter
-- **THEN** действия бинда выполняются (как `exec`), поиск «воркспейс» находит бинды перемещения на воркспейсы
+- **WHEN** the user found a bind by search and pressed Enter
+- **THEN** the bind's actions are executed (as with `exec`); searching «воркспейс» finds the binds that move to workspaces
 
-#### Scenario: Esc ничего не делает
+#### Scenario: Esc does nothing
 
-- **WHEN** пользователь закрывает fuzzel по Esc
-- **THEN** stdout fuzzel пуст, ни одно действие не выполняется, код выхода `kbinds dmenu` равен 0
+- **WHEN** the user closes fuzzel with Esc
+- **THEN** fuzzel's stdout is empty, no action is executed, and the exit code of `kbinds dmenu` is 0
 
-#### Scenario: Повторный вызов
+#### Scenario: Second invocation
 
-- **WHEN** dmenu вызывается второй раз после успешного выполнения
-- **THEN** меню открывается с полным списком биндов (инструмент не держит состояния между запусками)
+- **WHEN** dmenu is invoked a second time after a successful execution
+- **THEN** the menu opens with the full bind list (the tool keeps no state between runs)
 
-### Requirement: Доступность и деградация
+### Requirement: Availability and degradation
 
-Если fuzzel не найден в PATH или его запуск не удался, команда SHALL завершиться с кодом 2 и диагностикой в stderr, не выполняя никаких действий.
+If fuzzel is not found in PATH or fails to launch, the command SHALL terminate with code 2 and a diagnostic in stderr, without executing any action.
 
-#### Scenario: fuzzel отсутствует
+#### Scenario: fuzzel is missing
 
-- **WHEN** `kbinds dmenu` запущен в окружении без fuzzel
-- **THEN** код выхода 2, сообщение об ошибке в stderr
+- **WHEN** `kbinds dmenu` runs in an environment without fuzzel
+- **THEN** exit code 2, an error message in stderr

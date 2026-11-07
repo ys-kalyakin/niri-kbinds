@@ -2,86 +2,86 @@
 
 ## Purpose
 
-Единый механизм локализации `kbinds`: язык всех пользовательских поверхностей (оверлей, CLI help, диагностика, аудит, дефолтные заголовки и группы) выбирается по языку системы, без новых зависимостей и без изменения машинных контрактов.
+A single localization mechanism for `kbinds`: the language of all user-facing surfaces (the overlay, CLI help, diagnostics, audit, default titles and groups) is selected by the system language, with no new dependencies and no changes to machine contracts.
 
 ## ADDED Requirements
 
-### Requirement: Определение языка системы
+### Requirement: Detecting the system language
 
-При старте любого процесса `kbinds` (все CLI-команды, dmenu, оверлей) язык SHALL определяться по переменным окружения в порядке приоритета: `LC_ALL` → `LC_MESSAGES` → `LANG` (первая непустая). Из значения берётся подтег языка до первого разделителя `_`, `-` или `.` (например, `ru_RU.UTF-8` → `ru`). Язык фиксируется на всё время работы процесса; живое переключение языка не требуется. Пустое значение, `C`, `C.UTF-8`, `POSIX` и неизвестный подтег трактуются как английский.
+At startup of any `kbinds` process (all CLI commands, dmenu, the overlay), the language SHALL be determined from environment variables in priority order `LC_ALL` → `LC_MESSAGES` → `LANG` (first non-empty wins); the subtag up to the first `_`, `-`, or `.` is used (e.g., `ru_RU.UTF-8` → `ru`). The language is fixed for the process lifetime; live switching is not required. Empty values, `C`, `C.UTF-8`, `POSIX`, and unknown subtags mean English.
 
-#### Scenario: Русская локаль системы
+#### Scenario: Russian system locale
 
-- **WHEN** процесс `kbinds` запущен с `LC_ALL=ru_RU.UTF-8`
-- **THEN** все пользовательские строки (оверлей, диагностика, находки аудита, дефолтные заголовки и группы) выводятся по-русски
+- **WHEN** a `kbinds` process is run with `LC_ALL=ru_RU.UTF-8`
+- **THEN** all user-facing strings (the overlay, diagnostics, audit findings, default titles and groups) are printed in Russian
 
-#### Scenario: Английская локаль и приоритет LC_ALL
+#### Scenario: English locale and LC_ALL priority
 
-- **WHEN** процесс запущен с `LC_ALL=en_US.UTF-8` и `LANG=ru_RU.UTF-8`
-- **THEN** строки выводятся по-английски: `LC_ALL` имеет приоритет над `LANG`
+- **WHEN** the process is run with `LC_ALL=en_US.UTF-8` and `LANG=ru_RU.UTF-8`
+- **THEN** strings are printed in English: `LC_ALL` takes priority over `LANG`
 
-#### Scenario: Локаль без языка
+#### Scenario: Locale without a language
 
-- **WHEN** переменные локали не заданы или равны `C`/`POSIX`
-- **THEN** строки выводятся по-английски (fallback)
+- **WHEN** the locale variables are unset or equal to `C`/`POSIX`
+- **THEN** strings are printed in English (fallback)
 
-### Requirement: Каталоги и fallback
+### Requirement: Catalogs and fallback
 
-Система SHALL поддерживать каталоги строк `ru` и `en`. Каждое сообщение SHALL иметь перевод на оба языка (полнота каталога гарантируется структурой данных, а не ручной проверкой). Ключ без перевода в выбранной локали SHALL отображаться по-английски. Строки с подстановками SHALL подставлять значения в соответствии с грамматикой языка каталога (шаблоны переводов независимы).
+The system SHALL support the `ru` and `en` string catalogs. Every message SHALL have a translation into both languages (catalog completeness is guaranteed by the data structure, not by manual checking). A key without a translation in the selected locale SHALL be displayed in English. Strings with substitutions SHALL substitute values according to the grammar of the catalog's language (translation templates are independent).
 
-#### Scenario: Полнота каталога структурно
+#### Scenario: Structural catalog completeness
 
-- **WHEN** в каталог добавляется новое сообщение
-- **THEN** отсутствие хотя бы одного из двух переводов не компилируется (оба языка заданы в одной записи сообщения)
+- **WHEN** a new message is added to the catalog
+- **THEN** the absence of either of the two translations does not compile (both languages are given in a single message record)
 
-#### Scenario: Подстановка значений
+#### Scenario: Value substitution
 
-- **WHEN** оверлей показывает счётчик при `en_US.UTF-8` и 3 видимых биндах из 10
-- **THEN** отображается «3 of 10 binds», а не смесь языков или шаблон с незаполненными местами
+- **WHEN** the overlay shows the counter under `en_US.UTF-8` with 3 visible binds out of 10
+- **THEN** "3 of 10 binds" is displayed, not a mix of languages or a template with unfilled slots
 
-### Requirement: Охват поверхностей
+### Requirement: Surface coverage
 
-Все пользовательские строки SHALL локализоваться по языку системы: тексты оверлея «Центр» (плейсхолдер поиска, счётчик, футер-подсказка, заголовок шпаргалки), CLI help команд и флагов, человекочитаемая диагностика ошибок в stderr, находки `kbinds audit` в человекочитаемом виде, дефолтные заголовки и названия групп биндов из встроенного словаря. Комментарии в коде и документация SHALL НЕ локализоваться.
+All user-facing strings SHALL be localized by the system language: the texts of the "Center" overlay (search placeholder, counter, footer hint, cheat-sheet title), the CLI help of commands and flags, human-readable error diagnostics in stderr, `kbinds audit` findings in human-readable form, and the default titles and group names of binds from the built-in dictionary. Code comments and documentation SHALL NOT be localized.
 
-#### Scenario: Оверлей следует локали
+#### Scenario: The overlay follows the locale
 
-- **WHEN** оверлей открыт при `LANG=ru_RU.UTF-8` и затем при `LANG=en_US.UTF-8`
-- **THEN** в первом случае плейсхолдер «Поиск…», счётчик «N из M биндов», футер и заголовок «Важные клавиши»; во втором — их английские эквиваленты
+- **WHEN** the overlay is opened under `LANG=ru_RU.UTF-8` and then under `LANG=en_US.UTF-8`
+- **THEN** in the first case the placeholder is «Поиск…», the counter «N из M биндов», the footer and the title «Важные клавиши»; in the second — their English equivalents
 
-#### Scenario: CLI help следует локали
+#### Scenario: CLI help follows the locale
 
-- **WHEN** выполнено `kbinds --help` при `LC_ALL=en_US.UTF-8`
-- **THEN** описания команд и флагов выведены по-английски; при `ru_RU.UTF-8` — по-русски
+- **WHEN** `kbinds --help` is run under `LC_ALL=en_US.UTF-8`
+- **THEN** the descriptions of commands and flags are printed in English; under `ru_RU.UTF-8` — in Russian
 
-#### Scenario: Дефолтные заголовки следуют локали
+#### Scenario: Default titles follow the locale
 
-- **WHEN** конфиг содержит `Mod+Q { close-window; }` без `hotkey-overlay-title`, процесс запущен при `en_US.UTF-8`
-- **THEN** заголовок бинда — английский перевод из словаря (например, «Close window»), группа — английское название группы окон
+- **WHEN** the config contains `Mod+Q { close-window; }` without `hotkey-overlay-title`, and the process runs under `en_US.UTF-8`
+- **THEN** the bind title is the English translation from the dictionary (e.g., "Close window"), the group is the English name of the windows group
 
-### Requirement: Независимость машинных контрактов
+### Requirement: Machine contracts stay locale-independent
 
-Локаль SHALL НЕ влиять на: идентификаторы биндов (`id`), набор и имена полей JSON (`kbinds list --json`, `kbinds audit --json`), коды выходов, формат пунктов dmenu `<keys_display> — <title>` и промпт fuzzel `binds> `, имена экшенов в командах `niri msg`, значения `keys_display`.
+The locale SHALL NOT affect: bind identifiers (`id`), the set and names of JSON fields (`kbinds list --json`, `kbinds audit --json`), exit codes, the dmenu item format `<keys_display> — <title>` and the fuzzel prompt `binds> `, action names in `niri msg` commands, and the values of `keys_display`.
 
-#### Scenario: JSON-схема стабильна
+#### Scenario: JSON schema is stable
 
-- **WHEN** `kbinds list --json` выполнен при `ru_RU.UTF-8` и при `en_US.UTF-8`
-- **THEN** в обоих случаях валидный JSON-массив с одинаковым набором полей; различаются только значения `title`/`group` дефолтных биндов, `id` идентичны
+- **WHEN** `kbinds list --json` is run under `ru_RU.UTF-8` and under `en_US.UTF-8`
+- **THEN** in both cases a valid JSON array with the same set of fields; only the `title`/`group` values of default binds differ, the `id`s are identical
 
-#### Scenario: Промпт и коды выходов стабильны
+#### Scenario: Prompt and exit codes are stable
 
-- **WHEN** `kbinds dmenu` запущен при разных локалях, а `kbinds audit --strict` — на конфиге с конфликтом
-- **THEN** промпт fuzzel остаётся `binds> `, формат пунктов `<keys_display> — <title>` не меняется, код выхода strict-аудита равен 1 при любой локали
+- **WHEN** `kbinds dmenu` is run under different locales, and `kbinds audit --strict` is run on a config with a conflict
+- **THEN** the fuzzel prompt remains `binds> `, the item format `<keys_display> — <title>` does not change, and the strict-audit exit code is 1 under any locale
 
-### Requirement: Данные пользователя и словарь вне локализации
+### Requirement: User data and the dictionary stay outside localization
 
-Данные из конфига пользователя SHALL НЕ переводиться никогда: заголовки `hotkey-overlay-title`/`title`, команды `spawn`, комментарии конфига. Принадлежность имени экшена словарю (используется правилом A2 аудита) SHALL НЕ зависеть от локали.
+Data from the user's config SHALL NEVER be translated: `hotkey-overlay-title`/`title` titles, `spawn` commands, config comments. Whether an action name is in the dictionary (used by audit rule A2) SHALL NOT depend on the locale.
 
-#### Scenario: Данные пользователя не переводятся
+#### Scenario: User data is not translated
 
-- **WHEN** в конфиге задан `hotkey-overlay-title="Случайные обои"` и система работает в `en_US.UTF-8`
-- **THEN** заголовок бинда остаётся «Случайные обои» в оверлее, dmenu, `list` и JSON
+- **WHEN** the config sets `hotkey-overlay-title="Случайные обои"` and the system runs in `en_US.UTF-8`
+- **THEN** the bind title remains «Случайные обои» in the overlay, dmenu, `list`, and JSON
 
-#### Scenario: A2 не зависит от локали
+#### Scenario: A2 is locale-independent
 
-- **WHEN** `kbinds audit` запущен при `en_US.UTF-8` на конфиге с builtin-биндом без `hotkey-overlay-title`, имя которого есть в словаре
-- **THEN** находка A2 не выдаётся, хотя словарный заголовок теперь выводится по-английски
+- **WHEN** `kbinds audit` is run under `en_US.UTF-8` on a config with a builtin bind without `hotkey-overlay-title` whose name is in the dictionary
+- **THEN** the A2 finding is not emitted, even though the dictionary title is now printed in English

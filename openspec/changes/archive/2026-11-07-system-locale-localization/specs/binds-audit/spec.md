@@ -2,21 +2,21 @@
 
 ## MODIFIED Requirements
 
-### Requirement: Вывод аудита
+### Requirement: Audit output
 
-`kbinds audit` SHALL выводить находки в человекочитаемом виде на языке локали системы (capability `localization`): при `ru` — на русском, при `en` и локалях без перевода — на английском; смысл, уровень и состав находок от языка не зависят. С `--json` — машиночитаемый список находок (id правила, уровень, сообщение, ссылки на бинды); имена полей и id правил от локали не зависят, текст сообщений в JSON соответствует выбранной локали. С `--strict` и наличием хотя бы одной находки `error` код выхода SHALL быть 1; без `--strict` — 0 при любых находках. На конфиге без находок аудит SHALL давать ноль находок и код 0.
+`kbinds audit` SHALL print findings in a human-readable form in the system locale language (capability `localization`): under `ru` — in Russian, under `en` and locales without a translation — in English; the meaning, level, and composition of findings do not depend on the language. With `--json` — a machine-readable list of findings (rule id, level, message, references to binds); field names and rule ids do not depend on the locale, and the message texts in JSON follow the selected locale. With `--strict` and at least one `error` finding the exit code SHALL be 1; without `--strict` — 0 regardless of findings. On a config without findings the audit SHALL produce zero findings and exit code 0.
 
-#### Scenario: Язык находок следует локали
+#### Scenario: Finding language follows the locale
 
-- **WHEN** `kbinds audit` запущен на конфиге с конфликтом `Mod+D` при `ru_RU.UTF-8` и затем при `en_US.UTF-8`
-- **THEN** в обоих случаях находка `error` выведена, по-русски в первом случае и по-английски во втором; id правила и уровень совпадают
+- **WHEN** `kbinds audit` is run on a config with the `Mod+D` conflict under `ru_RU.UTF-8` and then under `en_US.UTF-8`
+- **THEN** in both cases the `error` finding is printed, in Russian in the first case and in English in the second; the rule id and level match
 
-#### Scenario: Strict-режим
+#### Scenario: Strict mode
 
-- **WHEN** `kbinds audit --strict` запущен на живом конфиге с конфликтом `Mod+D` при `en_US.UTF-8`
-- **THEN** код выхода 1, англоязычная находка `error` выведена в stdout или stderr согласно обычному выводу
+- **WHEN** `kbinds audit --strict` is run on the live config with the `Mod+D` conflict under `en_US.UTF-8`
+- **THEN** exit code 1, the English-language `error` finding is printed to stdout or stderr per the regular output rules
 
-#### Scenario: Негативный тест
+#### Scenario: Negative test
 
-- **WHEN** `kbinds audit` запущен на фикстуре без находок (`clean.kdl`)
-- **THEN** ноль находок, код выхода 0
+- **WHEN** `kbinds audit` is run on a fixture without findings (`clean.kdl`)
+- **THEN** zero findings, exit code 0

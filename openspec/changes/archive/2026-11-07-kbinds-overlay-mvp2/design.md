@@ -2,50 +2,50 @@
 
 ## Context
 
-Крейт `niri-kbinds` (MVP1, заархивирован как `2026-11-07-kbinds-mvp`) содержит библиотечные модули `parser`, `model`, `normalize`, `groups`, `audit`, `exec`, `fuzzel` и CLI-бинарь `kbinds`. На живой сессии `kbinds list` выдаёт **161** бинд (число «144» из ТЗ — исторический счёт Mod-биндов; оверлей показывает всё, что даёт парсер). Мотивация — в proposal.md; поведение — в specs/center-overlay.
+The `niri-kbinds` crate (MVP1, archived as `2026-11-07-kbinds-mvp`) contains the library modules `parser`, `model`, `normalize`, `groups`, `audit`, `exec`, `fuzzel` and the CLI binary `kbinds`. On the live session `kbinds list` reports **161** binds (the "144" figure from the task spec is a historical count of Mod binds; the overlay shows everything the parser yields). The motivation is in proposal.md; the behavior is in specs/center-overlay.
 
-Проверенные факты среды (2026-11-07): Fedora 45, niri 26.04, `WAYLAND_DISPLAY=wayland-1`, фокусный монитор DP-2 2560×1440; GTK4/gtk4-layer-shell devel-пакеты не установлены, sudo недоступен; `niri msg --json focused-output` (глобальный флаг **до** подкоманды) возвращает `{"name":"DP-2",…}` — форма `niri msg focused-output --json` из ТЗ §9.2 не существует; в конфиге пользователя 0 кириллических дублей буквенных биндов; rustup-прокси в песочнице сломаны — cargo запускать с `PATH="$(ls -d ~/.rustup/toolchains/*/bin | head -1):$PATH"`.
+Verified environment facts (2026-11-07): Fedora 45, niri 26.04, `WAYLAND_DISPLAY=wayland-1`, focused monitor DP-2 2560×1440; the GTK4/gtk4-layer-shell devel packages are not installed, sudo is unavailable; `niri msg --json focused-output` (the global flag **before** the subcommand) returns `{"name":"DP-2",…}` — the `niri msg focused-output --json` form from task spec §9.2 does not exist; the user's config has 0 Cyrillic duplicates of letter binds; the rustup proxies in the sandbox are broken — run cargo with `PATH="$(ls -d ~/.rustup/toolchains/*/bin | head -1):$PATH"`.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Второй `[[bin]]` `kbinds-overlay` поверх общей библиотеки, без правок логики MVP1.
-- Тестируемость без GUI: фильтрация, группировка и навигация — чистые функции.
-- Сборка только из crates.io (критерий приёмки §11.1 ТЗ).
-- Прозрачное затемнение и exclusive-клавиатура через layer-shell.
+- A second `[[bin]]` `kbinds-overlay` on top of the shared library, without edits to MVP1 logic.
+- Testability without a GUI: filtering, grouping, and navigation are pure functions.
+- Building from crates.io only (the acceptance criterion §11.1 of the task spec).
+- A transparent scrim and an exclusive keyboard via layer-shell.
 
 **Non-Goals:**
-- Режим `--mode panel` (stretch, отдельное ТЗ), настройки темы, анимации, защита от второго инстанса, правки модулей MVP1.
-- `-D warnings`-чистота достигается, но рефакторинг чужого кода MVP1 не входит.
+- The `--mode panel` mode (stretch, a separate task spec), theme settings, animations, guarding against a second instance, edits to the MVP1 modules.
+- `-D warnings` cleanliness is achieved, but refactoring the foreign MVP1 code is not included.
 
 ## Decisions
 
-- **D1. Стек: `iced` + `iced_layershell` 0.19.1** (waycrate/exwlshelleventloop). Альтернативы отклонены: GTK4+gtk4-layer-shell (нет devel-пакетов и sudo), голый wayland-client/smithay (ручной рендер и цикл — непропорционально), iced без layershell (нет overlay-слоя). Совместимую версию `iced` взять из `Cargo.toml`/примеров `iced_layershell` 0.19 (docs.rs); слой `Overlay`, `KeyboardInteractivity::Exclusive`, якоря на 4 края, целевой output — по имени из D3. Если API не даёт exclusive-клавиатуру или прозрачность — вернуться с фактами и вариантами (ТЗ §9.1), стек молча не менять. Арбитр — M1.
-- **D2. Компоновка**: `src/bin/overlay.rs` — тонкий вход (clap-аргументы, разбор конфига библиотекой, ошибки → stderr + exit 2, запуск UI); в `lib.rs` добавляется `pub mod ui` с `ui/items.rs` (модели строк/групп, чистые функции `filter`, `move_selection`, сборка групп — тестируются без GUI), `ui/app.rs` (состояние iced + `Message`-enum, только применение чистых функций), `ui/theme.rs` (токены палитры ТЗ §6, стили карточки/строк/keycaps). Так bin остаётся тонким, как `main.rs` в MVP1, а логика покрыта юнит-тестами.
-- **D3. Фокусный выход**: при старте `niri msg --json focused-output`, парсинг `serde_json` (уже зависимость), поле `name`. Fallback: команда недоступна/ошибка → сообщение в stderr, exit 2. Поверхность живёт на выбранном выходе; переключение мониторов после открытия не обрабатываем (ТЗ §9.2).
-- **D4. Dry-run в stderr без правки exec**: `exec_bind(_, true)` печатает в stdout (поведение MVP1, закреплено тестами). Оверлею нужен stderr (ТЗ §5.8), поэтому он сам печатает `exec::display_command(&exec::action_argv(action))` для каждого действия бинда в stderr — обе функции публичны. Реальное выполнение — `exec_bind(bind, false)`. `exec.rs` не меняется.
-- **D5. Прозрачность**: clear-color сцены iced — `rgba(8,6,14,0.55)`; surface формата RGBA у layershell. Проверяется визуально на M1 (окна должны просвечивать); если рендер заливает непрозрачным — блокер §11.2, возврат с фактами.
-- **D6. Модель выделения**: плоский `Vec` видимых строк (группы развернуты в порядке MVP1), `selected: usize`; `move_selection` циклит по модулю длины; при смене фильтра выделение сбрасывается на 0 (предсказуемо и без «прыжков»); выбранная строка доскролливается в видимую область.
-- **D7. Закрытие**: любое закрытие (Esc, клик вне, успешный Enter, dry-run) — выход из iced-приложения, код процесса 0. Ничего не выполняется только при Esc/клике вне.
-- **D8. Бинд в niri (M5)**: по решению пользователя — заменить штатный оверлей: `Mod+Shift+Slash { spawn "kbinds" "overlay"; }` **и дубль `Mod+Shift+backslash`** (ru-раскладка: у слэш-клавиши нет кириллического keysym — паттерн уже используется в конфиге); `show-hotkey-overlay` переносится на свободный `Mod+Shift+U`. Проверка после reload: дубликат комбо niri 26.04 отвергает ЦЕЛИКОМ; реальную ошибку смотреть в `journalctl --user` (`niri msg request-error` возвращает демо-заглушку).
+- **D1. Stack: `iced` + `iced_layershell` 0.19.1** (waycrate/exwlshelleventloop). Rejected alternatives: GTK4+gtk4-layer-shell (no devel packages and no sudo), bare wayland-client/smithay (manual rendering and event loop — disproportionate), iced without layershell (no overlay layer). Take the compatible `iced` version from the `Cargo.toml`/examples of `iced_layershell` 0.19 (docs.rs); the `Overlay` layer, `KeyboardInteractivity::Exclusive`, anchors on all 4 edges, the target output — by name from D3. If the API does not provide an exclusive keyboard or transparency — come back with facts and options (task spec §9.1), do not change the stack silently. The arbiter is M1.
+- **D2. Layout**: `src/bin/overlay.rs` — a thin entry point (clap arguments, config parsing by the library, errors → stderr + exit 2, UI launch); `lib.rs` gains a `pub mod ui` with `ui/items.rs` (row/group models, the pure `filter` and `move_selection` functions, group assembly — tested without a GUI), `ui/app.rs` (iced state + a `Message` enum, only applying the pure functions), `ui/theme.rs` (palette tokens of task spec §6, card/row/keycap styles). This way the bin stays thin, like `main.rs` in MVP1, and the logic is covered by unit tests.
+- **D3. Focused output**: at startup, `niri msg --json focused-output`, parsing the `name` field with `serde_json` (already a dependency). Fallback: the command is unavailable/an error → a message to stderr, exit 2. The surface lives on the chosen output; monitor switching after opening is not handled (task spec §9.2).
+- **D4. Dry-run to stderr without edits to exec**: `exec_bind(_, true)` prints to stdout (MVP1 behavior, pinned by tests). The overlay needs stderr (task spec §5.8), so it prints `exec::display_command(&exec::action_argv(action))` for each action of the bind to stderr itself — both functions are public. Actual execution — `exec_bind(bind, false)`. `exec.rs` is unchanged.
+- **D5. Transparency**: the iced scene clear-color — `rgba(8,6,14,0.55)`; a surface in the RGBA format from layershell. Checked visually on M1 (windows must show through); if the render fills it opaque — a §11.2 blocker, come back with facts.
+- **D6. Selection model**: a flat `Vec` of visible rows (groups expanded in the MVP1 order), `selected: usize`; `move_selection` wraps modulo the length; on a filter change the selection resets to 0 (predictable, with no "jumps"); the selected row is scrolled into the visible area.
+- **D7. Closing**: any close (Esc, a click outside, a successful Enter, dry-run) — exit from the iced application, process code 0. Nothing is executed only on Esc/a click outside.
+- **D8. Bind in niri (M5)**: per the user's decision — replace the stock overlay: `Mod+Shift+Slash { spawn "kbinds" "overlay"; }` **and a duplicate `Mod+Shift+backslash`** (ru layout: the slash key has no Cyrillic keysym — the pattern is already used in the config); `show-hotkey-overlay` moves to the free `Mod+Shift+U`. Check after reload: niri 26.04 rejects a duplicate combo ENTIRELY; look for the real error in `journalctl --user` (`niri msg request-error` returns a demo stub).
 
 ## Risks / Trade-offs
 
-- [API `iced_layershell` 0.19 не совпадает с ожиданиями (exclusive-клавиатура, якоря, выбор выхода, альфа)] → арбитр M1; при блокировке — вернуться с фактами и 2–3 вариантами (включая откаты на голый layer-shell), не менять стек молча.
-- [wgpu-рендер iced может не поднять прозрачную поверхность на этой машине/драйвере] → проверка на M1 до остальных этапов; затемнение — ядро ценности оверлея.
-- [Кириллица в поле поиска iced на ru-раскладке может не вводиться] → живой сценарий §10.5 ТЗ; поле получает системный IME-ввод через winit, риск низкий, но проверяется до M3.
-- [`grim` не установлен → скриншот для README не снять] → шаг не блокирующий (ТЗ §10.3): интерактивный скриншот средствами niri руками.
-- [Слайд-оф-скейл: 161 строка с keycaps] → тривиально для iced; группировка разворачивается один раз при смене фильтра.
-- [Смена бинда затрагивает рабочий конфиг niri] → правка двух строк + перенос одной; откат — вернуть прежние три строки; проверка reload через journalctl.
+- [The `iced_layershell` 0.19 API may not match expectations (exclusive keyboard, anchors, output choice, alpha)] → M1 is the arbiter; if blocked — come back with facts and 2–3 options (including fallbacks to bare layer-shell), do not change the stack silently.
+- [iced's wgpu renderer may fail to raise a transparent surface on this machine/driver] → check on M1 before the other milestones; the scrim is the core of the overlay's value.
+- [Cyrillic may not be typeable into the iced search field on the ru layout] → live scenario §10.5 of the task spec; the field receives system IME input via winit, the risk is low, but it is checked before M3.
+- [`grim` is not installed → no screenshot for the README] → a non-blocking step (task spec §10.3): an interactive screenshot by niri's own means, by hand.
+- [Slide-of-scale: 161 rows with keycaps] → trivial for iced; the grouping is expanded once per filter change.
+- [Changing the bind touches the working niri config] → an edit of two lines + moving one; rollback — restore the previous three lines; check the reload via journalctl.
 
 ## Migration Plan
 
-Изменения аддитивные: новый бинарь и модуль `ui` не трогают существующие пути кода; CLI-команды MVP1 остаются как были (регресс-тест §10.4 ТЗ). Правка конфига niri — единственное изменение вне репозитория, она обратима вручную. Роллбэк: удалить `[[bin]]`-запись и `ui/`, вернуть строки конфига.
+The changes are additive: the new binary and the `ui` module do not touch the existing code paths; the MVP1 CLI commands remain as they were (the regression test §10.4 of the task spec). The niri config edit is the only change outside the repository, and it is reversible by hand. Rollback: delete the `[[bin]]` entry and `ui/`, restore the config lines.
 
 ## Open Questions
 
-(нет блокирующих: детали API `iced_layershell` сознательно отложены до M1 по D1 — это управляемый риск с планом возврата, а не пропущенное решение)
+(none blocking: the `iced_layershell` API details are deliberately postponed to M1 per D1 — a manageable risk with a return plan, not a missed decision)
 
-## Дополнение (2026-11-07, по запросу пользователя): тема noctalia
+## Addendum (2026-11-07, at the user's request): the noctalia theme
 
-- **D9. Тема следует палитре noctalia**: вместо фиксированной таблицы §6 цвета берутся из `~/.cache/kbinds/theme.json` — JSON-кэша, который пишет пользовательский шаблон noctalia (`~/.config/noctalia/templates/kbinds-overlay.json`, регистрация в `~/.config/noctalia/templates.toml`). Noctalia сама перерендеривает пользовательские шаблоны при смене палитры/режима dark-light — оверлей при следующем запуске подхватывает актуальные цвета. Раскладка токенов: scrim→затемнение, surface_container→карточка, outline/outline_variant→границы, on_surface/on_surface_variant→текст, primary→акцент/выделение; альфы из §6 сохраняются. Активная схема на машине — `builtin Kanagawa`, dark (`noctalia msg color-scheme-get`). Фолбэк при отсутствии/битом кэше — фиксированная палитра §6 (fallback-константы остаются в theme.rs).
+- **D9. The theme follows the noctalia palette**: instead of the fixed table of §6, the colors are taken from `~/.cache/kbinds/theme.json` — a JSON cache written by the user's noctalia template (`~/.config/noctalia/templates/kbinds-overlay.json`, registration in `~/.config/noctalia/templates.toml`). Noctalia itself re-renders user templates when the palette or the dark-light mode changes — the overlay picks up the current colors on its next launch. Token mapping: scrim→scrim, surface_container→card, outline/outline_variant→borders, on_surface/on_surface_variant→text, primary→accent/highlight; the alphas of §6 are preserved. The active scheme on the machine is `builtin Kanagawa`, dark (`noctalia msg color-scheme-get`). Fallback when the cache is missing/corrupt — the fixed palette of §6 (the fallback constants remain in theme.rs).

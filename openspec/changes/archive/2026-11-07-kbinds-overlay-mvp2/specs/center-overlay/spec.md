@@ -2,121 +2,121 @@
 
 ## Purpose
 
-Графический оверлей «Центр»: layer-shell поверхность поверх рабочего стола niri с затемнением, карточкой поиска и сгруппированным списком биндов — визуальная шпаргалка «посмотрел → нашёл → выполнил» поверх данных и исполнения MVP1.
+The graphical «Центр» ("Center") overlay: a layer-shell surface above the niri desktop with a scrim, a search card, and a grouped list of binds — a visual cheat sheet of "look → find → execute" on top of the data and execution of MVP1.
 
 ## ADDED Requirements
 
-### Requirement: Запуск и аргументы
+### Requirement: Launch and arguments
 
-`kbinds overlay` SHALL запускаться с флагами `--config PATH`, `--dry-run`, `--mode center` (центр — режим по умолчанию). Конфиг SHALL разбираться библиотекой MVP1 в модель до открытия UI; ошибка разбора или запуска вне Wayland-сессии SHALL выводить человекочитаемое сообщение в stderr и завершать процесс с кодом 2 без паник и трейсов.
+`kbinds overlay` SHALL run with the flags `--config PATH`, `--dry-run`, `--mode center` (center is the default mode). The config SHALL be parsed by the MVP1 library into the model before the UI opens; a parse error or a launch outside a Wayland session SHALL print a human-readable message to stderr and terminate the process with exit code 2, with no panics or backtraces.
 
-#### Scenario: Нечитаемый конфиг
+#### Scenario: Unreadable config
 
-- **WHEN** запуск `kbinds overlay --config /нет/такого.kdl`
-- **THEN** в stderr человекочитаемое сообщение об ошибке разбора, код выхода 2, поверхность не открывается
+- **WHEN** running `kbinds overlay --config /нет/такого.kdl`
+- **THEN** a human-readable parse error message in stderr, exit code 2, the surface does not open
 
-#### Scenario: Запуск вне Wayland-сессии
+#### Scenario: Launch outside a Wayland session
 
-- **WHEN** запуск без доступного `WAYLAND_DISPLAY`
-- **THEN** в stderr сообщение вида «kbinds-overlay: не найдена Wayland-сессия», код выхода 2, без паники/трейса
+- **WHEN** running without an available `WAYLAND_DISPLAY`
+- **THEN** a message like «kbinds-overlay: не найдена Wayland-сессия» ("kbinds-overlay: no Wayland session found") in stderr, exit code 2, no panic/backtrace
 
-### Requirement: Layer-shell поверхность на фокусном мониторе
+### Requirement: Layer-shell surface on the focused monitor
 
-Оверлей SHALL открываться как layer-shell поверхность слоя `overlay` с keyboard interactivity `exclusive`, привязанная к фокусному монитору, определённому при старте, занимая его целиком. Фон SHALL быть полупрозрачным затемнением `rgba(8,6,14,0.55)`, сквозь которое просвечивают окна. Поведение при переключении монитора после открытия не регламентируется.
+The overlay SHALL open as a layer-shell surface of the `overlay` layer with keyboard interactivity `exclusive`, anchored to the focused monitor determined at startup, covering it entirely. The background SHALL be a semi-transparent scrim `rgba(8,6,14,0.55)` through which windows show through. Behavior when the monitor is switched after opening is not regulated.
 
-#### Scenario: Полноэкранное затемнение на фокусном мониторе
+#### Scenario: Fullscreen scrim on the focused monitor
 
-- **GIVEN** фокусный монитор DP-2
-- **WHEN** запуск `kbinds overlay`
-- **THEN** поверхность открывается на DP-2 во весь экран, фон затемняет рабочий стол, окна просвечивают сквозь него
+- **GIVEN** the focused monitor is DP-2
+- **WHEN** running `kbinds overlay`
+- **THEN** the surface opens on DP-2 fullscreen, the background dims the desktop, windows show through it
 
-### Requirement: Карточка «Центр»
+### Requirement: The «Центр» card
 
-Поверх затемнения SHALL отображаться карточка по центру фокусного монитора: ширина 600px (не более 92% ширины монитора), радиус 20, тёмный фон, светлая граница, тень. Внутри карточки: поле поиска с автофокусом, сгруппированный список биндов (состав групп и их порядок — как в MVP1 `groups`), строки «title + keycaps», счётчик «N из M биндов» и футер-подсказка `↑↓ выбор · Enter выполнить · Esc закрыть`.
+Above the scrim SHALL be displayed a card in the center of the focused monitor: width 600px (no more than 92% of the monitor width), radius 20, dark background, light border, shadow. Inside the card: a search field with autofocus, a grouped list of binds (group composition and their order — as in MVP1 `groups`), "title + keycaps" rows, a «N из M биндов» counter, and the footer hint `↑↓ выбор · Enter выполнить · Esc закрыть`.
 
-#### Scenario: Состав карточки на живом конфиге
+#### Scenario: Card composition on the live config
 
-- **WHEN** запуск на живом конфиге с пустым запросом
-- **THEN** карточка содержит поле поиска в фокусе, группы в порядке MVP1, строки с keycaps, счётчик «M из M биндов» (M — общее число биндов, разобранных MVP1-парсером) и футер-подсказку
+- **WHEN** running on the live config with an empty query
+- **THEN** the card contains a focused search field, groups in MVP1 order, rows with keycaps, the counter «M из M биндов» (M — the total number of binds parsed by the MVP1 parser) and the footer hint
 
-### Requirement: Keycaps из keys_display
+### Requirement: Keycaps from keys_display
 
-Keycaps строк SHALL строиться из поля `keys_display` модели MVP1 без нового парсинга клавиш; кириллические клавиши SHALL отображаться символами (например, `Mod+В`). Вторичный текст SHALL быть читаем на обоих фонах карточки.
+Row keycaps SHALL be built from the `keys_display` field of the MVP1 model without any new key parsing; Cyrillic keys SHALL be displayed as characters (e.g., `Mod+В`). The secondary text SHALL be readable on both backgrounds of the card.
 
-#### Scenario: Кириллический бинд
+#### Scenario: Cyrillic bind
 
-- **GIVEN** бинд `Mod+В` в конфиге
-- **THEN** в его строке keycaps отображаются как `Mod` и `В` символами
+- **GIVEN** the bind `Mod+В` in the config
+- **THEN** its row's keycaps are displayed as the characters `Mod` and `В`
 
-### Requirement: Live-фильтр поиска
+### Requirement: Live search filter
 
-Ввод любых символов в поле поиска SHALL фильтровать список live по полю `search` модели (кириллица вводится как обычный текст). Пустой запрос SHALL показывать все бинды. Группы, не содержащие видимых строк, SHALL скрываться.
+Typing any characters into the search field SHALL filter the list live by the `search` field of the model (Cyrillic is typed as ordinary text). An empty query SHALL show all binds. Groups without visible rows SHALL be hidden.
 
-#### Scenario: Фильтрация по «воркспейс»
+#### Scenario: Filtering by «воркспейс»
 
-- **WHEN** пользователь вводит «воркспейс» (в том числе в ru-раскладке)
-- **THEN** список сужается до биндов с совпадением в `search`, счётчик отражает «N из M», пустые группы не отображаются
+- **WHEN** the user types «воркспейс» (including in the ru layout)
+- **THEN** the list narrows to binds with a match in `search`, the counter reflects «N из M», empty groups are not displayed
 
-#### Scenario: Пустой запрос показывает всё
+#### Scenario: Empty query shows everything
 
-- **WHEN** пользователь очищает поле поиска
-- **THEN** отображаются все бинды конфига
+- **WHEN** the user clears the search field
+- **THEN** all binds of the config are displayed
 
-### Requirement: Клавиатурная навигация
+### Requirement: Keyboard navigation
 
-`↑` и `↓` SHALL циклично перемещать выделение по видимым строкам (список замыкается по кругу); `Enter` SHALL выполнять выделенный бинд и закрывать оверлей; `Esc` SHALL закрывать оверлей без выполнения. `Tab` не используется.
+`↑` and `↓` SHALL move the selection cyclically across visible rows (the list wraps around); `Enter` SHALL execute the selected bind and close the overlay; `Esc` SHALL close the overlay without executing. `Tab` is not used.
 
-#### Scenario: Цикличность выделения
+#### Scenario: Selection wrap-around
 
-- **GIVEN** выделение на последней видимой строке
-- **WHEN** нажатие `↓`
-- **THEN** выделение переходит на первую видимую строку
+- **GIVEN** the selection is on the last visible row
+- **WHEN** pressing `↓`
+- **THEN** the selection moves to the first visible row
 
-#### Scenario: Esc закрывает без действий
+#### Scenario: Esc closes without actions
 
-- **WHEN** нажатие `Esc` при выделенном бинде
-- **THEN** оверлей закрывается, ни одно действие не выполняется
+- **WHEN** pressing `Esc` with a bind selected
+- **THEN** the overlay closes, no action is executed
 
-### Requirement: Мышь
+### Requirement: Mouse
 
-Клик по видимой строке SHALL выполнять её бинд; клик вне карточки SHALL закрывать оверлей; список SHALL прокручиваться колесом мыши.
+Clicking a visible row SHALL execute its bind; clicking outside the card SHALL close the overlay; the list SHALL scroll with the mouse wheel.
 
-#### Scenario: Клик по строке
+#### Scenario: Row click
 
-- **WHEN** пользователь кликает по строке бинда
-- **THEN** бинд выполняется так же, как по Enter, оверлей закрывается
+- **WHEN** the user clicks a bind row
+- **THEN** the bind is executed the same way as via Enter, the overlay closes
 
-#### Scenario: Клик вне карточки
+#### Scenario: Click outside the card
 
-- **WHEN** пользователь кликает по затемнению за пределами карточки
-- **THEN** оверлей закрывается без выполнения действий
+- **WHEN** the user clicks the scrim outside the card
+- **THEN** the overlay closes without executing actions
 
-### Requirement: Выполнение и dry-run
+### Requirement: Execution and dry-run
 
-Выполнение выбранного бинда SHALL идти через маршрутизацию MVP1 `exec` (`niri msg action …` для всех действий бинда по порядку), после чего оверлей SHALL закрыться. В режиме `--dry-run` вместо выполнения командная строка бинда SHALL печататься в stderr, оверлей SHALL закрыться с кодом 0, никакие действия не выполняются.
+Executing the selected bind SHALL go through the MVP1 `exec` routing (`niri msg action …` for all actions of the bind in order), after which the overlay SHALL close. In `--dry-run` mode, instead of executing, the bind's command line SHALL be printed to stderr, the overlay SHALL close with exit code 0, and no actions are executed.
 
-#### Scenario: Dry-run печатает команду в stderr
+#### Scenario: Dry-run prints the command to stderr
 
-- **WHEN** `kbinds overlay --dry-run` и пользователь выбирает бинд
-- **THEN** в stderr печатается командная строка выбранного бинда, процесс завершается с кодом 0, действие не выполняется
+- **WHEN** `kbinds overlay --dry-run` and the user selects a bind
+- **THEN** the command line of the selected bind is printed to stderr, the process exits with code 0, the action is not executed
 
-#### Scenario: Enter выполняет действие
+#### Scenario: Enter executes the action
 
-- **GIVEN** запуск без `--dry-run`
-- **WHEN** пользователь выполняет бинд
-- **THEN** действия бинда выполняются как `kbinds exec <id>` и оверлей закрывается
+- **GIVEN** a run without `--dry-run`
+- **WHEN** the user executes a bind
+- **THEN** the bind's actions are executed as `kbinds exec <id>` and the overlay closes
 
-### Requirement: Тема следует палитре noctalia
+### Requirement: Theme follows the noctalia palette
 
-Цвета оверлея SHALL браться из кэша палитры noctalia (`~/.cache/kbinds/theme.json` — его пишет пользовательский шаблон noctalia из резолвленной палитры: scrim→затемнение, surface_container→карточка, outline/outline_variant→границы, on_surface/on_surface_variant→текст, primary→акцент). Если кэш отсутствует или не разбирается, оверлей SHALL использовать фиксированную палитру ТЗ §6. Альфа-уровни §6 (55/94/16%) сохраняются.
+The overlay colors SHALL be taken from the noctalia palette cache (`~/.cache/kbinds/theme.json` — written by the user's noctalia template from the resolved palette: scrim→scrim, surface_container→card, outline/outline_variant→borders, on_surface/on_surface_variant→text, primary→accent). If the cache is missing or unparseable, the overlay SHALL use the fixed palette of the task spec §6. The alpha levels of §6 (55/94/16%) are preserved.
 
-#### Scenario: Кэш палитры применяется
+#### Scenario: Palette cache applied
 
-- **GIVEN** пользовательский шаблон noctalia отрендерен (активная схема — builtin Kanagawa, dark)
-- **WHEN** запуск `kbinds overlay`
-- **THEN** карточка, текст, акцент и затемнение окрашены токенами из кэша; смена палитры в noctalia меняет цвета оверлея после перерендера шаблона
+- **GIVEN** the user's noctalia template has been rendered (the active scheme is builtin Kanagawa, dark)
+- **WHEN** running `kbinds overlay`
+- **THEN** the card, text, accent, and scrim are colored with the tokens from the cache; changing the palette in noctalia changes the overlay colors after the template is re-rendered
 
-#### Scenario: Нет кэша — запасная палитра
+#### Scenario: No cache — fallback palette
 
-- **WHEN** запуск при отсутствующем/битом `~/.cache/kbinds/theme.json`
-- **THEN** оверлей открывается с фиксированной палитрой ТЗ §6 без ошибок и паник
+- **WHEN** running with a missing/corrupt `~/.cache/kbinds/theme.json`
+- **THEN** the overlay opens with the fixed palette of the task spec §6, without errors or panics

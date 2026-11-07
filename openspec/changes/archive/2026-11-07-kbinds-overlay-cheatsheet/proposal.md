@@ -1,53 +1,56 @@
-# Proposal: шпаргалка важных клавиш в оверлее
+# Proposal: important-keys cheat sheet in the overlay
 
 ## Why
 
-Замена штатного PNG-оверлея niri на `kbinds overlay` убрала «мгновенный взгляд»
-на самые важные комбинации: они теперь растворены в общем списке из 162 биндов.
-Чтобы увидеть, скажем, «Mod+Space — смена раскладки» или «Mod+Alt+L — лок
-экрана», нужно искать глазами или фильтровать — хотя раньше niri показывал
-именно этот набор отдельной шпаргалкой.
+Replacing the stock niri PNG overlay with `kbinds overlay` removed the
+"instant glance" at the most important combos: they are now dissolved in the
+general list of 162 binds. To see, say, "Mod+Space — layout switch" or
+"Mod+Alt+L — screen lock", one has to hunt with the eyes or filter — although
+niri used to show exactly this set as a separate cheat sheet.
 
 ## What Changes
 
-- В карточке оверлея появляется **вторая колонка справа** — статичная
-  шпаргалка важных клавиш (read-only): список биндов, у которых в конфиге
-  задан `hotkey-overlay-title` (на живом конфиге — 16 шт.), в том же виде
-  «title + keycaps», что и левый список.
-- Шпаргалка **не интерактивна**: не фильтруется поиском, не реагирует на клики
-  и `↑↓` — навигация и выполнение работают только в левом списке.
-- Карточка становится шире (две колонки), левый список сужается; геометрия
-  хит-теста «клик вне карточки» обновляется вместе с шириной.
-- Содержимое шпаргалки управляется конфигом: добавить/убрать важный бинд в
-  шпаргалке = добавить/убрать `hotkey-overlay-title` в `config.kdl` (как и
-  раньше у niri), без правок кода.
+- The overlay card gains a **second column on the right** — a static
+  important-keys cheat sheet (read-only): a list of binds whose config entry
+  sets `hotkey-overlay-title` (16 on the live config), in the same
+  "title + keycaps" form as the left list.
+- The cheat sheet is **not interactive**: it is not filtered by the search and
+  does not react to clicks or `↑↓` — navigation and execution work only in the
+  left list.
+- The card becomes wider (two columns) and the left list narrows; the
+  hit-test geometry of "click outside the card" updates together with the
+  width.
+- The cheat sheet content is driven by the config: adding/removing an
+  important bind from the cheat sheet = adding/removing `hotkey-overlay-title`
+  in `config.kdl` (just like in niri before), no code edits.
 
 ## Capabilities
 
 ### New Capabilities
 
-<!-- нет новых capability -->
+<!-- no new capabilities -->
 
 ### Modified Capabilities
 
-- `center-overlay`: карточка «Центр» получает вторую (правую) колонку —
-  статичную шпаргалку биндов с `hotkey-overlay-title`; меняется требование
-  «Карточка „Центр“» (состав и ширина) и добавляется требование о шпаргалке
-  (read-only, не зависит от поиска).
+- `center-overlay`: the "Center" card gains a second (right) column — a
+  static cheat sheet of binds with `hotkey-overlay-title`; the requirement
+  "The "Center" card" changes (composition and width) and a requirement about
+  the cheat sheet is added (read-only, independent of the search).
 
 ## Impact
 
-- **Код**: `src/ui/app.rs` (вёрстка карточки, состояние, ширина),
-  `src/ui/items.rs` (pure-функция выборки биндов для шпаргалки, геометрия
-  карточки/хит-тест), `src/ui/theme.rs` (стиль панели, если нужен новый
-  разделитель/фон колонки). CLI (`main.rs`, `bin/overlay.rs`), парсер, модель
-  и exec — без изменений.
-- **Данные**: бинды для шпаргалки уже есть в модели (`overlay_title_present`) —
-  новый парсинг не нужен.
-- **Зависимости**: новых нет (iced 0.14 + iced_layershell 0.19.1 как есть).
-- **Спеки**: дельта модифицирует capability `center-overlay`, который попадает
-  в main-спеки при архивации `kbinds-overlay-mvp2`. Порядок работ: сначала
-  `/opsx:archive` для `kbinds-overlay-mvp2`, затем apply этого change — иначе
-  дельта «MODIFIED» ссылается на ещё не существующую main-спеку.
-- **Docs**: README (раздел Overlay) — абзац про правую панель + новый
-  скриншот.
+- **Code**: `src/ui/app.rs` (card layout, state, width),
+  `src/ui/items.rs` (pure bind-selection function for the cheat sheet, card
+  and hit-test geometry), `src/ui/theme.rs` (panel style, if a new column
+  separator/background is needed). The CLI (`main.rs`, `bin/overlay.rs`),
+  parser, model, and exec — unchanged.
+- **Data**: the binds for the cheat sheet are already in the model
+  (`overlay_title_present`) — no new parsing needed.
+- **Dependencies**: none new (iced 0.14 + iced_layershell 0.19.1 as is).
+- **Specs**: the delta modifies the `center-overlay` capability, which lands
+  in the main specs upon archiving `kbinds-overlay-mvp2`. Order of work: first
+  `/opsx:archive` for `kbinds-overlay-mvp2`, then apply of this change —
+  otherwise the "MODIFIED" delta references a main spec that does not exist
+  yet.
+- **Docs**: README (Overlay section) — a paragraph about the right panel +
+  a new screenshot.
