@@ -9,7 +9,10 @@ pub enum Row {
     /// Group header with the group name.
     Header(String),
     /// Bind row; `index` points into the original binds vector.
-    Bind { index: usize },
+    Bind {
+        /// Index into the binds vector the row was built from.
+        index: usize,
+    },
 }
 
 impl Row {
@@ -72,14 +75,10 @@ pub fn move_selection(rows: &[Row], selected: usize, delta: i32) -> usize {
         .filter(|(_, row)| row.bind_index().is_some())
         .map(|(position, _)| position)
         .collect();
-    let Some(&current) = selectable.iter().find(|&&position| position == selected) else {
+    let Some(position) = selectable.iter().position(|&p| p == selected) else {
         return selectable.first().copied().unwrap_or(selected);
     };
     let count = selectable.len() as i32;
-    let position = selectable
-        .iter()
-        .position(|&p| p == current)
-        .expect("current comes from selectable");
     let next = (position as i32 + delta).rem_euclid(count) as usize;
     selectable[next]
 }
@@ -153,15 +152,16 @@ pub fn is_outside_card(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Action, Bind};
+    use crate::model::{Action, ActionKind, TitleSource};
+    use crate::testutil::sample_bind;
 
     fn bind(id: &str, title: &str, keys: &str, group: &str) -> Bind {
         Bind {
             id: id.into(),
             title: title.into(),
-            title_source: "overlay-title".into(),
+            title_source: TitleSource::OverlayTitle,
             actions: vec![Action {
-                kind: "builtin".into(),
+                kind: ActionKind::Builtin,
                 name: Some("close-window".into()),
                 cmd: None,
             }],
@@ -169,13 +169,8 @@ mod tests {
             keys_display: keys.split('+').map(String::from).collect(),
             combo: keys.to_lowercase(),
             group: group.into(),
-            repeat: true,
-            overlay_title_present: true,
-            overlay_title: Some(title.into()),
-            file: "/tmp/c.kdl".into(),
-            line: 1,
             search: format!("{title} {keys} spawn close-window {group}").to_lowercase(),
-            raw: String::new(),
+            ..sample_bind()
         }
     }
 

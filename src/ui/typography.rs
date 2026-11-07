@@ -6,15 +6,23 @@
 
 /// Base sizes (px at scale 1.0), pinned by `consts_match_spec_table`
 /// against the spec of change `overlay-font-scale`.
+/// Bind row and cheat-sheet row title.
 pub const ROW_TITLE: f32 = 18.0;
+/// Keycap chip label (monospace).
 pub const KEYCAP: f32 = 14.0;
+/// Search field text.
 pub const SEARCH: f32 = 20.0;
+/// Group header in the list.
 pub const GROUP_HEADER: f32 = 15.0;
+/// Right cheat-sheet panel header.
 pub const CHEATSHEET_HEADER: f32 = 15.0;
+/// Visible-binds counter and footer hints.
 pub const COUNTER_FOOTER: f32 = 13.0;
 
 /// Clamp bounds of the font scale (spec: 0.5–3.0).
+/// Lower clamp bound.
 pub const MIN_SCALE: f32 = 0.5;
+/// Upper clamp bound.
 pub const MAX_SCALE: f32 = 3.0;
 
 /// Resolve the font scale: the CLI flag wins over the theme-cache token,
@@ -22,7 +30,7 @@ pub const MAX_SCALE: f32 = 3.0;
 /// `[MIN_SCALE, MAX_SCALE]` (spec «Typography and font scale»).
 pub fn resolve(cli: Option<f32>, cache: Option<f32>) -> f32 {
     cli.and_then(sane)
-        .or(cache.and_then(sane))
+        .or_else(|| cache.and_then(sane))
         .unwrap_or(1.0)
         .clamp(MIN_SCALE, MAX_SCALE)
 }

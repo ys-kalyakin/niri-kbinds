@@ -16,7 +16,9 @@ use std::sync::atomic::{AtomicU8, Ordering};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Lang {
+    /// English fallback locale.
     En = 0,
+    /// Russian locale.
     Ru = 1,
 }
 
@@ -79,44 +81,78 @@ fn parse_lang(value: &str) -> Lang {
 #[derive(Debug, Clone, Copy)]
 pub enum Msg {
     // Overlay UI (SPEC center-overlay, «Карточка „Центр“»).
+    /// Search field placeholder.
     SearchPlaceholder,
+    /// Footer action hints line.
     FooterHints,
+    /// Right cheat-sheet panel header.
     CheatsheetHeader,
     // Overlay boot diagnostics.
+    /// No Wayland session in the environment.
     WaylandSessionNotFound,
+    /// `niri msg focused-output` failed or was unparseable.
     FocusedOutputFail,
+    /// The `niri msg` process could not be launched.
     NiriMsgLaunchFail,
+    /// `niri msg --json focused-output` returned unexpected JSON.
     NiriMsgBadFormat,
     // Exec diagnostics.
+    /// An action has an empty argv.
     EmptyCommand,
+    /// A builtin action has no direct fallback without niri.
     FallbackNotPossible,
+    /// The direct spawn fallback exists only on unix.
     DirectFallbackUnixOnly,
     // CLI diagnostics.
+    /// `HOME` is unset and no `--config` was given.
     HomeNotSet,
+    /// The parsed config contains no binds.
     EmptyConfig,
+    /// Prefix of top-level error messages.
     ErrorPrefix,
+    /// A real (non-broken-pipe) stdout write failure.
+    StdoutWriteFailed,
     // Audit report.
+    /// The audit found nothing.
     NoFindings,
+    /// Error-level finding name.
     LevelError,
+    /// Warning-level finding name.
     LevelWarn,
+    /// Info-level finding name.
     LevelInfo,
     // CLI help: `kbinds` root and subcommands.
+    /// Root command `about`.
     CliAbout,
+    /// `list` subcommand `about`.
     CmdList,
+    /// `exec` subcommand `about`.
     CmdExec,
+    /// `dmenu` subcommand `about`.
     CmdDmenu,
+    /// `audit` subcommand `about`.
     CmdAudit,
+    /// `overlay` subcommand `about`.
     CmdOverlay,
     // CLI help: arguments.
+    /// `--config` help.
     FlagConfig,
+    /// `--json` help.
     FlagJson,
+    /// `--dry-run` help.
     FlagDryRun,
+    /// `--strict` help.
     FlagStrict,
+    /// `--launcher` help.
     FlagLauncher,
+    /// `--mode` help.
     FlagMode,
+    /// `--font-scale` help.
     FlagFontScale,
+    /// `<id>` positional help.
     ArgId,
     // CLI help: the `kbinds-overlay` binary.
+    /// `kbinds-overlay` root `about`.
     OverlayBinAbout,
 }
 
@@ -159,6 +195,8 @@ pub fn tr(lang: Lang, msg: Msg) -> &'static str {
         (Msg::EmptyConfig, Lang::En) => "the config contains no binds",
         (Msg::ErrorPrefix, Lang::Ru) => "ошибка",
         (Msg::ErrorPrefix, Lang::En) => "error",
+        (Msg::StdoutWriteFailed, Lang::Ru) => "ошибка записи в stdout",
+        (Msg::StdoutWriteFailed, Lang::En) => "stdout write failed",
         (Msg::NoFindings, Lang::Ru) => "Находок нет.",
         (Msg::NoFindings, Lang::En) => "No findings.",
         (Msg::LevelError, Lang::Ru) => "error",

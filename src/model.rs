@@ -2,12 +2,64 @@
 
 use serde::Serialize;
 
+/// Kind of one action node inside a bind body (`SPEC §6` JSON value of
+/// `kind`; serialized kebab-case, so the JSON is unchanged by the enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ActionKind {
+    /// A niri builtin action with a name (`close-window;`).
+    Builtin,
+    /// `spawn "argv"…` — direct program launch.
+    Spawn,
+    /// `spawn-sh "line"` — one shell line.
+    SpawnSh,
+}
+
+impl ActionKind {
+    /// String label used in `describe()`, search text and audit details.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ActionKind::Builtin => "builtin",
+            ActionKind::Spawn => "spawn",
+            ActionKind::SpawnSh => "spawn-sh",
+        }
+    }
+}
+
+/// Where a bind's title came from (`SPEC §6` JSON value of `title_source`;
+/// serialized kebab-case, so the JSON is unchanged by the enum).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TitleSource {
+    /// The `hotkey-overlay-title` attribute.
+    OverlayTitle,
+    /// The dictionary title of a known builtin action.
+    ActionName,
+    /// The raw unknown action name.
+    RawAction,
+    /// The spawn command line.
+    Command,
+}
+
+impl TitleSource {
+    /// String label used in the JSON field value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TitleSource::OverlayTitle => "overlay-title",
+            TitleSource::ActionName => "action-name",
+            TitleSource::RawAction => "raw-action",
+            TitleSource::Command => "command",
+        }
+    }
+}
+
 /// One action node inside a bind body, in config order.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Action {
-    /// `builtin` | `spawn` | `spawn-sh`
-    pub kind: String,
-    /// Action name for `builtin` (e.g. `close-window`), `None` otherwise.
+    /// Kind of the action node.
+    pub kind: ActionKind,
+    /// Action name for [`ActionKind::Builtin`] (e.g. `close-window`), `None`
+    /// otherwise.
     pub name: Option<String>,
     /// Arguments: full argv for `spawn`, the shell line for `spawn-sh`,
     /// trailing arguments for `builtin`; `None` when there are none.
@@ -17,7 +69,7 @@ pub struct Action {
 impl Action {
     /// Human-readable description used in `search` and audit messages.
     pub fn describe(&self) -> String {
-        let mut text = self.kind.clone();
+        let mut text = self.kind.as_str().to_string();
         if let Some(name) = &self.name {
             text.push(' ');
             text.push_str(name);
@@ -37,8 +89,8 @@ pub struct Bind {
     pub id: String,
     /// Human-readable title (priority: overlay title → dictionary → command).
     pub title: String,
-    /// Where the title came from: `overlay-title` | `action-name` | `raw-action` | `command`.
-    pub title_source: String,
+    /// Where the title came from.
+    pub title_source: TitleSource,
     /// All action nodes of the bind body, in config order.
     pub actions: Vec<Action>,
     /// Key combo as written in the config, e.g. `Mod+Shift+W`.
@@ -63,44 +115,15 @@ pub struct Bind {
     pub line: usize,
     /// Lowercase concatenation of title, keys, actions and group.
     pub search: String,
-    /// Unknown properties/attributes kept verbatim for audit; not part of the JSON schema.
+    /// Unknown properties/attributes kept verbatim as diagnostics data;
+    /// audit rules A1–A3 never read it. Not part of the JSON schema.
     #[serde(skip_serializing)]
     pub raw: String,
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn sample_bind() -> Bind {
-        Bind {
-            id: "mod-shift-w".into(),
-            title: "Случайные обои".into(),
-            title_source: "overlay-title".into(),
-            actions: vec![Action {
-                kind: "spawn".into(),
-                name: None,
-                cmd: Some(vec![
-                    "noctalia".into(),
-                    "msg".into(),
-                    "wallpaper-random".into(),
-                ]),
-            }],
-            keys_raw: "Mod+Shift+W".into(),
-            keys_display: vec!["Mod".into(), "Shift".into(), "W".into()],
-            combo: "mod+shift+w".into(),
-            group: "Система".into(),
-            repeat: true,
-            overlay_title_present: true,
-            overlay_title: Some("Случайные обои".into()),
-            file: "/home/helloween/.config/niri/config.kdl".into(),
-            line: 214,
-            search:
-                "случайные обои mod+shift+w mod shift w spawn noctalia msg wallpaper-random система"
-                    .into(),
-            raw: String::new(),
-        }
-    }
+    use crate::testutil::sample_bind;
 
     #[test]
     fn json_matches_schema() {
@@ -138,18 +161,12 @@ mod tests {
 
     #[test]
     fn action_description_contains_kind_name_and_command() {
-        let builtin = Action {
-            kind: "builtin".into(),
-            name: Some("switch-layout".into()),
-            cmd: Some(vec!["next".into()]),
-        };
+        use crate::testutil::{builtin_with_args, spawn};
+
+        let builtin = builtin_with_args("switch-layout", &["next"]);
         assert_eq!(builtin.describe(), "builtin switch-layout next");
 
-        let spawn = Action {
-            kind: "spawn".into(),
-            name: None,
-            cmd: Some(vec!["kitty".into()]),
-        };
+        let spawn = spawn(&["kitty"]);
         assert_eq!(spawn.describe(), "spawn kitty");
     }
 }

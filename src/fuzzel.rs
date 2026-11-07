@@ -14,10 +14,15 @@ use anyhow::{Context, Result, bail};
 
 use crate::exec;
 use crate::l10n::{self, Msg};
-use crate::model::Bind;
+use crate::model::{ActionKind, Bind};
 
 /// One menu entry: the rendered item and the bind id it maps back to.
-pub type MenuItem = (String, String);
+pub struct MenuItem {
+    /// The rendered one-line menu item shown by the launcher.
+    pub item: String,
+    /// The bind id the item maps back to.
+    pub id: String,
+}
 
 fn sanitize(line: &str) -> String {
     line.replace(['\n', '\r'], " ")
@@ -28,7 +33,7 @@ fn sanitize(line: &str) -> String {
 fn base_item(bind: &Bind) -> String {
     let mut item = format!("{} — {}", bind.keys_display.join("+"), bind.title);
     for action in &bind.actions {
-        if action.kind == "builtin"
+        if action.kind == ActionKind::Builtin
             && let Some(name) = &action.name
             && !item.to_lowercase().contains(&name.to_lowercase())
         {
@@ -50,15 +55,18 @@ pub fn build_menu(binds: &[Bind]) -> Vec<MenuItem> {
         if *count > 1 {
             item.push_str(&format!(" [{}]", bind.id));
         }
-        menu.push((item, bind.id.clone()));
+        menu.push(MenuItem {
+            item,
+            id: bind.id.clone(),
+        });
     }
     menu
 }
 
 /// Map the launcher's selection back to the bind (exact item match).
 pub fn select_bind<'a>(menu: &[MenuItem], binds: &'a [Bind], choice: &str) -> Option<&'a Bind> {
-    let (_, id) = menu.iter().find(|(item, _)| item == choice)?;
-    binds.iter().find(|b| b.id == *id)
+    let entry = menu.iter().find(|m| m.item == choice)?;
+    binds.iter().find(|b| b.id == entry.id)
 }
 
 /// Run the launcher, return the bind the user picked (`None` = cancelled).
@@ -78,8 +86,8 @@ pub fn pick(launcher: &str, binds: &[Bind]) -> Result<Option<Bind>> {
         // The launcher may exit before reading all items (instant Esc,
         // crash): a broken pipe while feeding means the same as an empty
         // selection, so stop feeding and let wait_with_output decide (D6).
-        for (item, _) in &menu {
-            if writeln!(stdin, "{item}").is_err() {
+        for entry in &menu {
+            if writeln!(stdin, "{}", entry.item).is_err() {
                 break;
             }
         }
@@ -109,29 +117,24 @@ pub fn run(launcher: &str, binds: &[Bind]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Action;
+    use crate::model::{Action, TitleSource};
+    use crate::testutil::sample_bind;
 
     fn bind(id: &str, keys: &str, title: &str, action_name: Option<&str>) -> Bind {
         Bind {
             id: id.into(),
             title: title.into(),
-            title_source: "overlay-title".into(),
+            title_source: TitleSource::OverlayTitle,
             actions: vec![Action {
-                kind: "builtin".into(),
+                kind: ActionKind::Builtin,
                 name: action_name.map(Into::into),
                 cmd: None,
             }],
             keys_raw: keys.into(),
             keys_display: keys.split('+').map(Into::into).collect(),
             combo: "mod+x".into(),
-            group: "Окна".into(),
-            repeat: true,
-            overlay_title_present: true,
             overlay_title: Some(title.into()),
-            file: "/tmp/c.kdl".into(),
-            line: 1,
-            search: String::new(),
-            raw: String::new(),
+            ..sample_bind()
         }
     }
 
@@ -139,23 +142,23 @@ mod tests {
     fn items_have_keys_title_and_action_name() {
         let binds = vec![bind("mod-q", "Mod+Q", "Закрыть окно", Some("close-window"))];
         let menu = build_menu(&binds);
-        assert_eq!(menu[0].0, "Mod+Q — Закрыть окно (close-window)");
+        assert_eq!(menu[0].item, "Mod+Q — Закрыть окно (close-window)");
     }
 
     #[test]
     fn action_name_not_duplicated_when_title_contains_it() {
         let binds = vec![bind("mod-t", "Mod+T", "kitty", None)];
         let menu = build_menu(&binds);
-        assert_eq!(menu[0].0, "Mod+T — kitty");
+        assert_eq!(menu[0].item, "Mod+T — kitty");
     }
 
     #[test]
     fn newlines_are_sanitized() {
         let mut b = bind("mod-n", "Mod+N", "строка\nвторая", None);
-        b.title_source = "command".into();
+        b.title_source = TitleSource::Command;
         let menu = build_menu(&[b]);
-        assert_eq!(menu[0].0, "Mod+N — строка вторая");
-        assert!(!menu[0].0.contains('\n'));
+        assert_eq!(menu[0].item, "Mod+N — строка вторая");
+        assert!(!menu[0].item.contains('\n'));
     }
 
     #[test]
@@ -167,13 +170,16 @@ mod tests {
             bind("mod-d-2", "Mod+D", "Launcher", Some("same-action")),
         ];
         let menu = build_menu(&binds);
-        assert_eq!(menu[0].0, "Mod+D — Launcher (same-action)");
-        assert_eq!(menu[1].0, "Mod+D — Launcher (same-action) [mod-d-2]");
+        assert_eq!(menu[0].item, "Mod+D — Launcher (same-action)");
+        assert_eq!(menu[1].item, "Mod+D — Launcher (same-action) [mod-d-2]");
         assert_eq!(
-            select_bind(&menu, &binds, &menu[1].0).unwrap().id,
+            select_bind(&menu, &binds, &menu[1].item).unwrap().id,
             "mod-d-2"
         );
-        assert_eq!(select_bind(&menu, &binds, &menu[0].0).unwrap().id, "mod-d");
+        assert_eq!(
+            select_bind(&menu, &binds, &menu[0].item).unwrap().id,
+            "mod-d"
+        );
         assert!(select_bind(&menu, &binds, "нет такого").is_none());
     }
 

@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use niri_kbinds::model::ActionKind;
 use niri_kbinds::parser::parse_config;
 
 fn fixture(name: &str) -> PathBuf {
@@ -54,7 +55,7 @@ fn edge_fixture_covers_all_spec_cases() {
     let space = binds.iter().find(|b| b.keys_raw == "Mod+Space").unwrap();
     assert_eq!(space.title, "Switch layout");
     let k = binds.iter().find(|b| b.keys_raw == "Mod+K").unwrap();
-    assert_eq!(k.actions[0].kind, "spawn-sh");
+    assert_eq!(k.actions[0].kind, ActionKind::SpawnSh);
     let mute = binds
         .iter()
         .find(|b| b.keys_raw == "XF86AudioMute")
@@ -74,6 +75,40 @@ fn edge_fixture_covers_all_spec_cases() {
 fn cyclic_include_fixture_is_an_error() {
     let err = parse_config(&fixture("cycle-a.kdl")).expect_err("cycle must fail");
     assert!(format!("{err:#}").contains("cyclic"));
+}
+
+/// A real (non-pipe) stdout write failure must surface as exit code 2 —
+/// not be silently swallowed as "downstream closed the pipe" (binds-cli
+/// exit codes). `/dev/full` accepts nothing and fails every write.
+#[test]
+#[cfg(target_os = "linux")]
+fn list_stdout_write_failure_exits_2() {
+    let dev_full = std::fs::File::create("/dev/full").expect("/dev/full exists");
+    let status = Command::new(env!("CARGO_BIN_EXE_kbinds"))
+        .args(["list", "--json"])
+        .stdout(dev_full)
+        .status()
+        .expect("spawn kbinds");
+    assert_eq!(
+        status.code(),
+        Some(2),
+        "real stdout write failure must exit 2"
+    );
+}
+
+/// `kbinds list --json | head -1`: head closes the pipe early; the broken
+/// pipe stays a quiet success (exit 0, no panic, no error message).
+#[test]
+fn list_broken_pipe_is_quiet_success() {
+    let status = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "{} list --json | head -1",
+            env!("CARGO_BIN_EXE_kbinds")
+        ))
+        .status()
+        .expect("run under sh");
+    assert_eq!(status.code(), Some(0), "broken pipe must stay a success");
 }
 
 fn grep_count(path: &Path, pattern: &str) -> usize {

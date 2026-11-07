@@ -9,6 +9,9 @@ description = "Interactive cheatsheet for niri key binds: list, exec, fuzzel dme
 name = "niri_kbinds"
 path = "src/lib.rs"
 
+[lints.rust]
+missing_docs = "warn"
+
 [[bin]]
 name = "kbinds"
 path = "src/main.rs"

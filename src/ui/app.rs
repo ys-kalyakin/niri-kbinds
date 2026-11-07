@@ -34,7 +34,9 @@ const CHEATSHEET_SCROLL: &str = "kbinds-overlay-cheatsheet";
 /// Everything the overlay needs before the UI boots.
 #[derive(Debug, Clone)]
 pub struct OverlayOptions {
+    /// Path to the niri config to parse.
     pub config_path: PathBuf,
+    /// Print commands to stderr instead of executing.
     pub dry_run: bool,
     /// Raw `--font-scale` CLI value; resolved against the theme cache in
     /// [`run`] (design D1) — `None` lets the cache token (or 1.0) decide.
@@ -288,13 +290,9 @@ fn scroll_to_selected(state: &Overlay) -> Task<Message> {
         .enumerate()
         .filter_map(|(position, row)| row.bind_index().map(|_| position))
         .collect();
-    let Some(&selected) = bind_positions.iter().find(|&&p| p == state.selected) else {
+    let Some(ordinal) = bind_positions.iter().position(|&p| p == state.selected) else {
         return Task::none();
     };
-    let ordinal = bind_positions
-        .iter()
-        .position(|&p| p == selected)
-        .unwrap_or_default();
     let total = bind_positions.len();
     if total <= 1 {
         return Task::none();
@@ -314,7 +312,14 @@ fn subscription(_state: &Overlay) -> Subscription<Message> {
         }),
         // Ignored-only listener is enough for mouse and resize: a click
         // outside the card is ignored by every widget by definition.
-        iced::event::listen().map(Message::Iced),
+        // Keyboard is excluded — the raw listener above owns it, so keys
+        // are delivered exactly once.
+        iced::event::listen_with(|event, status, _window| match status {
+            iced::event::Status::Ignored if !matches!(event, Event::Keyboard(_)) => {
+                Some(Message::Iced(event))
+            }
+            _ => None,
+        }),
     ])
 }
 
@@ -559,7 +564,7 @@ fn focused_output_from_json(json: &str) -> Option<(String, Size)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Action;
+    use crate::testutil::{builtin, sample_bind, spawn};
 
     const SAMPLE: &str = r#"{"name":"DP-2","make":"Microstep","model":"MAG 271QPX E2",
         "serial":null,"physical_size":[590,330],"modes":[],
@@ -589,32 +594,8 @@ mod tests {
     #[test]
     fn bind_commands_covers_every_action() {
         let bind = Bind {
-            id: "mod-t".into(),
-            title: "Терминал".into(),
-            title_source: "overlay-title".into(),
-            actions: vec![
-                Action {
-                    kind: "spawn".into(),
-                    name: None,
-                    cmd: Some(vec!["kitty".into()]),
-                },
-                Action {
-                    kind: "builtin".into(),
-                    name: Some("close-window".into()),
-                    cmd: None,
-                },
-            ],
-            keys_raw: "Mod+T".into(),
-            keys_display: vec!["Mod".into(), "T".into()],
-            combo: "mod+t".into(),
-            group: "Программы".into(),
-            repeat: true,
-            overlay_title_present: true,
-            overlay_title: None,
-            file: "/tmp/c.kdl".into(),
-            line: 1,
-            search: String::new(),
-            raw: String::new(),
+            actions: vec![spawn(&["kitty"]), builtin("close-window")],
+            ..sample_bind()
         };
         assert_eq!(
             bind_commands(&bind),

@@ -1,3 +1,6 @@
+//! `kbinds` CLI binary: thin entry over the shared library
+//! (`niri_kbinds`), see SPEC §4.
+
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -86,7 +89,7 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<i32> {
-    let config_path = niri_kbinds::default_config_path_if_none(cli.config.clone())?;
+    let config_path = niri_kbinds::default_config_path_if_none(cli.config)?;
     match cli.command {
         Command::List { json } => {
             niri_kbinds::cmd_list(&config_path, json)?;

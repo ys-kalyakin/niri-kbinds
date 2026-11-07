@@ -253,27 +253,36 @@ impl Palette {
     }
 }
 
-/// Radii per SPEC-V2 §6: card 20, rows 10, search field 12, keycaps 6.
+/// Radii per SPEC-V2 §6.
+/// Card container radius.
 pub const CARD_RADIUS: f32 = 20.0;
+/// Bind row radius.
 pub const ROW_RADIUS: f32 = 10.0;
+/// Search field radius.
 pub const FIELD_RADIUS: f32 = 12.0;
+/// Keycap chip radius.
 pub const KEYCAP_RADIUS: f32 = 6.0;
 
 /// `#RRGGBB` (and `#RRGGBBAA`) → Color; `None` on anything else.
+///
+/// Parsing walks bytes (`hex.as_bytes()`), never str slices: a non-ASCII
+/// cache value like `"#中中"` (6 bytes) must fall back per-token, not panic
+/// on a byte index inside a char boundary (the corrupt-cache scenario of
+/// the overlay spec forbids panics).
 fn parse_hex(value: &str) -> Option<Color> {
-    let hex = value.strip_prefix('#')?;
+    let hex = value.strip_prefix('#')?.as_bytes();
     let (r, g, b, a) = match hex.len() {
         6 => (
-            u8::from_str_radix(&hex[0..2], 16).ok()?,
-            u8::from_str_radix(&hex[2..4], 16).ok()?,
-            u8::from_str_radix(&hex[4..6], 16).ok()?,
+            hex_byte(hex, 0)?,
+            hex_byte(hex, 2)?,
+            hex_byte(hex, 4)?,
             255u8,
         ),
         8 => (
-            u8::from_str_radix(&hex[0..2], 16).ok()?,
-            u8::from_str_radix(&hex[2..4], 16).ok()?,
-            u8::from_str_radix(&hex[4..6], 16).ok()?,
-            u8::from_str_radix(&hex[6..8], 16).ok()?,
+            hex_byte(hex, 0)?,
+            hex_byte(hex, 2)?,
+            hex_byte(hex, 4)?,
+            hex_byte(hex, 6)?,
         ),
         _ => return None,
     };
@@ -283,6 +292,21 @@ fn parse_hex(value: &str) -> Option<Color> {
         b: b as f32 / 255.0,
         a: a as f32 / 255.0,
     })
+}
+
+/// Two hex digits of `bytes` starting at `i`, as a byte value.
+fn hex_byte(bytes: &[u8], i: usize) -> Option<u8> {
+    Some(hex_digit(*bytes.get(i)?)? << 4 | hex_digit(*bytes.get(i + 1)?)?)
+}
+
+/// One ASCII hex digit.
+fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 const fn rgb(r: u8, g: u8, b: u8) -> Color {
@@ -324,6 +348,17 @@ mod tests {
         assert!(parse_hex("c8c093").is_none(), "no # prefix");
         assert!(parse_hex("#c8c0").is_none(), "too short");
         assert!(parse_hex("#zzzzzz").is_none(), "not hex");
+    }
+
+    /// Non-ASCII cache values must fall back per-token, never panic on a
+    /// byte index inside a char boundary (corrupt-cache scenario).
+    #[test]
+    fn hex_parsing_rejects_non_ascii_without_panicking() {
+        assert!(parse_hex("#中中").is_none(), "6 bytes, not ASCII hex");
+        assert!(parse_hex("#ёёё").is_none(), "6 bytes of 2-byte chars");
+        assert!(parse_hex("#中").is_none(), "odd length, multibyte");
+        assert!(parse_hex("#中中中中").is_none(), "12 bytes, multibyte");
+        assert!(parse_hex("#a中c0").is_none(), "hex prefix, multibyte tail");
     }
 
     #[test]
@@ -369,6 +404,19 @@ mod tests {
         // Wrong-typed value: fallback for that token.
         let wrong = Palette::from_json(r##"{"on_surface": 42}"##);
         assert_eq!(wrong.text_primary(), fallback.text_primary());
+    }
+
+    /// The corrupt-cache scenario end-to-end: non-ASCII hex values fall
+    /// back per-token instead of aborting the overlay.
+    #[test]
+    fn corrupt_cache_with_non_ascii_hex_falls_back() {
+        let palette = Palette::from_json(
+            r##"{"primary": "#中中", "on_surface": "#ёёё", "outline": "#a中c0"}"##,
+        );
+        let fallback = Palette::fallback();
+        assert_eq!(palette.accent(), fallback.accent());
+        assert_eq!(palette.text_primary(), fallback.text_primary());
+        assert_eq!(palette.keycap_border(), fallback.keycap_border());
     }
 
     #[test]

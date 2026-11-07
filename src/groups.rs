@@ -8,18 +8,25 @@
 //! membership itself is locale-independent.
 
 use crate::l10n::Lang;
-use crate::model::Bind;
+use crate::model::{ActionKind, Bind, TitleSource};
 
 /// Display groups of the bind list. The set is fixed; localized names live
 /// in [`Group::name`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
+    /// Window management actions.
     Windows,
+    /// Workspace actions.
     Workspaces,
+    /// Focus and navigation actions.
     Navigation,
+    /// Screenshot actions.
     Screenshots,
+    /// Shell/launcher layer actions.
     System,
+    /// Spawn binds of regular applications.
     Apps,
+    /// Everything the rules above do not classify.
     Other,
 }
 
@@ -518,7 +525,7 @@ const ACTION_TITLES: &[(&str, Group, &str, &str)] = &[
 /// default title in the stock overlay). Locale-independent — the A2 audit
 /// rule relies on membership, not on the wording.
 pub fn is_dictionary_action(name: &str) -> bool {
-    ACTION_TITLES.iter().any(|(n, _, _, _)| *n == name)
+    dictionary_entry(name).is_some()
 }
 
 fn dictionary_entry(name: &str) -> Option<&(&'static str, Group, &'static str, &'static str)> {
@@ -570,11 +577,9 @@ const SYSTEM_SPAWN_PROGRAMS: &[&str] = &["noctalia", "vicinae", "fuzzel", "niri"
 
 /// Group for a spawn bind by its program name.
 fn spawn_group(cmd: &[String]) -> Group {
-    let first = cmd
-        .first()
-        .map(|p| p.split_whitespace().next().unwrap_or(p).to_string())
-        .unwrap_or_default();
-    if SYSTEM_SPAWN_PROGRAMS.contains(&first.as_str()) {
+    let first = cmd.first().map(String::as_str).unwrap_or_default();
+    let program = first.split_whitespace().next().unwrap_or(first);
+    if SYSTEM_SPAWN_PROGRAMS.contains(&program) {
         Group::System
     } else {
         Group::Apps
@@ -584,11 +589,11 @@ fn spawn_group(cmd: &[String]) -> Group {
 /// Title/group/source for one bind, following the priority of SPEC §6:
 /// `hotkey-overlay-title` → dictionary action name → raw action name →
 /// spawn command line.
-fn title_and_group(bind: &Bind, lang: Lang) -> (String, &'static str, String) {
+fn title_and_group(bind: &Bind, lang: Lang) -> (String, TitleSource, String) {
     if let Some(overlay) = &bind.overlay_title {
         return (
             overlay.clone(),
-            "overlay-title",
+            TitleSource::OverlayTitle,
             group_for_actions(bind, lang),
         );
     }
@@ -599,12 +604,12 @@ fn group_for_actions(bind: &Bind, lang: Lang) -> String {
     let Some(action) = bind.actions.first() else {
         return Group::Other.name(lang).to_string();
     };
-    match action.kind.as_str() {
-        "spawn" | "spawn-sh" => {
+    match action.kind {
+        ActionKind::Spawn | ActionKind::SpawnSh => {
             let cmd = action.cmd.clone().unwrap_or_default();
             spawn_group(&cmd).name(lang).to_string()
         }
-        _ => {
+        ActionKind::Builtin => {
             let name = action.name.as_deref().unwrap_or_default();
             match dictionary_entry(name) {
                 Some((_, group, _, _)) => group.name(lang).to_string(),
@@ -614,20 +619,24 @@ fn group_for_actions(bind: &Bind, lang: Lang) -> String {
     }
 }
 
-fn group_and_title_for_actions(bind: &Bind, lang: Lang) -> (String, &'static str, String) {
+fn group_and_title_for_actions(bind: &Bind, lang: Lang) -> (String, TitleSource, String) {
     let Some(action) = bind.actions.first() else {
         return (
             bind.keys_raw.clone(),
-            "raw-action",
+            TitleSource::RawAction,
             Group::Other.name(lang).to_string(),
         );
     };
-    match action.kind.as_str() {
-        "spawn" | "spawn-sh" => {
+    match action.kind {
+        ActionKind::Spawn | ActionKind::SpawnSh => {
             let cmd_text = action.cmd.clone().unwrap_or_default().join(" ");
-            (cmd_text, "command", group_for_actions(bind, lang))
+            (
+                cmd_text,
+                TitleSource::Command,
+                group_for_actions(bind, lang),
+            )
         }
-        _ => {
+        ActionKind::Builtin => {
             let name = action.name.clone().unwrap_or_default();
             match dictionary_entry(&name) {
                 Some((_, group, title_en, title_ru)) => {
@@ -637,13 +646,13 @@ fn group_and_title_for_actions(bind: &Bind, lang: Lang) -> (String, &'static str
                     };
                     (
                         title.to_string(),
-                        "action-name",
+                        TitleSource::ActionName,
                         group.name(lang).to_string(),
                     )
                 }
                 None => (
                     name.clone(),
-                    "raw-action",
+                    TitleSource::RawAction,
                     group_by_prefix(&name).name(lang).to_string(),
                 ),
             }
@@ -666,7 +675,7 @@ pub fn search_text(bind: &Bind) -> String {
 pub fn finalize(bind: &mut Bind, lang: Lang) {
     let (title, title_source, group) = title_and_group(bind, lang);
     bind.title = title;
-    bind.title_source = title_source.to_string();
+    bind.title_source = title_source;
     bind.group = group;
     bind.search = search_text(bind);
 }
@@ -675,32 +684,15 @@ pub fn finalize(bind: &mut Bind, lang: Lang) {
 mod tests {
     use super::*;
     use crate::model::Action;
+    use crate::testutil::{builtin, sample_bind, spawn};
 
     fn bind_with(actions: Vec<Action>) -> Bind {
         Bind {
-            id: "x".into(),
-            title: String::new(),
-            title_source: String::new(),
             actions,
-            keys_raw: "Mod+T".into(),
-            keys_display: vec!["Mod".into(), "T".into()],
-            combo: "mod+t".into(),
-            group: String::new(),
-            repeat: true,
+            // The sample's overlay title would hijack the title priority.
             overlay_title_present: false,
             overlay_title: None,
-            file: "/tmp/c.kdl".into(),
-            line: 1,
-            search: String::new(),
-            raw: String::new(),
-        }
-    }
-
-    fn builtin(name: &str) -> Action {
-        Action {
-            kind: "builtin".into(),
-            name: Some(name.into()),
-            cmd: None,
+            ..sample_bind()
         }
     }
 
@@ -711,7 +703,7 @@ mod tests {
         bind.overlay_title = Some("Случайные обои".into());
         finalize(&mut bind, Lang::Ru);
         assert_eq!(bind.title, "Случайные обои");
-        assert_eq!(bind.title_source, "overlay-title");
+        assert_eq!(bind.title_source, TitleSource::OverlayTitle);
     }
 
     #[test]
@@ -719,7 +711,7 @@ mod tests {
         let mut bind = bind_with(vec![builtin("close-window")]);
         finalize(&mut bind, Lang::Ru);
         assert_eq!(bind.title, "Закрыть окно");
-        assert_eq!(bind.title_source, "action-name");
+        assert_eq!(bind.title_source, TitleSource::ActionName);
         assert_eq!(bind.group, "Окна");
 
         let mut bind = bind_with(vec![builtin("close-window")]);
@@ -733,7 +725,7 @@ mod tests {
         let mut bind = bind_with(vec![builtin("some-custom-action")]);
         finalize(&mut bind, Lang::Ru);
         assert_eq!(bind.title, "some-custom-action");
-        assert_eq!(bind.title_source, "raw-action");
+        assert_eq!(bind.title_source, TitleSource::RawAction);
         assert_eq!(bind.group, "Прочее");
         finalize(&mut bind, Lang::En);
         assert_eq!(bind.group, "Other");
@@ -760,25 +752,13 @@ mod tests {
 
     #[test]
     fn spawn_title_is_command_line() {
-        let mut bind = bind_with(vec![Action {
-            kind: "spawn".into(),
-            name: None,
-            cmd: Some(vec!["kitty".into()]),
-        }]);
+        let mut bind = bind_with(vec![spawn(&["kitty"])]);
         finalize(&mut bind, Lang::Ru);
         assert_eq!(bind.title, "kitty");
-        assert_eq!(bind.title_source, "command");
+        assert_eq!(bind.title_source, TitleSource::Command);
         assert_eq!(bind.group, "Программы");
 
-        let mut bind = bind_with(vec![Action {
-            kind: "spawn".into(),
-            name: None,
-            cmd: Some(vec![
-                "noctalia".into(),
-                "msg".into(),
-                "wallpaper-random".into(),
-            ]),
-        }]);
+        let mut bind = bind_with(vec![spawn(&["noctalia", "msg", "wallpaper-random"])]);
         finalize(&mut bind, Lang::En);
         assert_eq!(bind.group, "System");
     }
@@ -795,21 +775,13 @@ mod tests {
 
     #[test]
     fn search_includes_title_keys_actions_and_group() {
-        let mut bind = bind_with(vec![Action {
-            kind: "spawn".into(),
-            name: None,
-            cmd: Some(vec![
-                "noctalia".into(),
-                "msg".into(),
-                "wallpaper-random".into(),
-            ]),
-        }]);
+        let mut bind = bind_with(vec![spawn(&["noctalia", "msg", "wallpaper-random"])]);
         bind.overlay_title_present = true;
         bind.overlay_title = Some("Случайные обои".into());
         finalize(&mut bind, Lang::Ru);
         assert_eq!(
             bind.search,
-            "случайные обои mod+t mod t spawn noctalia msg wallpaper-random система"
+            "случайные обои mod+shift+w mod shift w spawn noctalia msg wallpaper-random система"
         );
     }
 

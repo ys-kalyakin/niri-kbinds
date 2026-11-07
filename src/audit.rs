@@ -5,19 +5,22 @@
 //! with no bind at all. Findings never claim which duplicate "wins" — niri
 //! rejects the whole config (see the change notes).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
 use crate::l10n::{self, Lang, Msg};
-use crate::model::{Action, Bind};
+use crate::model::{Action, ActionKind, Bind};
 
 /// Severity of a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
+    /// Conflicts that make niri reject the config.
     Error,
+    /// Binds invisible in the stock overlay.
     Warn,
+    /// Common actions with no bind.
     Info,
 }
 
@@ -36,8 +39,11 @@ impl Level {
 /// Reference to one of the binds involved in a finding.
 #[derive(Debug, Clone, Serialize)]
 pub struct BindRef {
+    /// The combo as written in the config.
     pub keys_raw: String,
+    /// Absolute path of the source file.
     pub file: String,
+    /// 1-based line of the bind node.
     pub line: usize,
     /// What exactly this variant does (actions or title).
     pub detail: String,
@@ -48,8 +54,11 @@ pub struct BindRef {
 pub struct Finding {
     /// Rule id: `A1` | `A2` | `A3`.
     pub rule: String,
+    /// Severity of the finding.
     pub level: Level,
+    /// Localized human-readable message.
     pub message: String,
+    /// Binds involved in the finding (empty for A3).
     pub binds: Vec<BindRef>,
 }
 
@@ -86,8 +95,7 @@ fn a1_duplicates(binds: &[Bind], lang: Lang) -> Vec<Finding> {
         if group.len() < 2 {
             continue;
         }
-        let distinct: std::collections::BTreeSet<String> =
-            group.iter().map(|b| bind_detail(b)).collect();
+        let distinct: BTreeSet<String> = group.iter().map(|b| bind_detail(b)).collect();
         if distinct.len() < 2 {
             continue; // same actions duplicated — not a conflict (SPEC §9)
         }
@@ -114,9 +122,9 @@ fn a2_overlay_invisible(binds: &[Bind], lang: Lang) -> Vec<Finding> {
         let Some(action) = bind.actions.first() else {
             continue;
         };
-        let is_custom = match action.kind.as_str() {
-            "spawn" | "spawn-sh" => true,
-            _ => action
+        let is_custom = match action.kind {
+            ActionKind::Spawn | ActionKind::SpawnSh => true,
+            ActionKind::Builtin => action
                 .name
                 .as_deref()
                 .is_none_or(|name| !crate::groups::is_dictionary_action(name)),
@@ -172,7 +180,7 @@ pub const COMMON_ACTIONS: &[&str] = &[
 
 /// Rule A3: common niri actions with no bind at all.
 fn a3_missing_actions(binds: &[Bind], lang: Lang) -> Vec<Finding> {
-    let mut bound: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    let mut bound: BTreeSet<&str> = BTreeSet::new();
     for bind in binds {
         for action in &bind.actions {
             if let Some(name) = &action.name {

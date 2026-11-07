@@ -9,23 +9,23 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, bail};
 
 use crate::l10n::{self, Msg};
-use crate::model::{Action, Bind};
+use crate::model::{Action, ActionKind, Bind};
 
 /// Full argv to run for one action, always routed through `niri msg action`.
 pub fn action_argv(action: &Action) -> Vec<String> {
-    let mut argv: Vec<String> = vec!["niri".to_string(), "msg".to_string(), "action".to_string()];
-    match action.kind.as_str() {
-        "spawn" => {
+    let mut argv: Vec<String> = ["niri", "msg", "action"].map(Into::into).into();
+    match action.kind {
+        ActionKind::Spawn => {
             argv.push("spawn".into());
             argv.push("--".into());
             argv.extend(action.cmd.clone().unwrap_or_default());
         }
-        "spawn-sh" => {
+        ActionKind::SpawnSh => {
             argv.push("spawn-sh".into());
             argv.push("--".into());
             argv.extend(action.cmd.clone().unwrap_or_default());
         }
-        _ => {
+        ActionKind::Builtin => {
             argv.push(action.name.clone().unwrap_or_default());
             argv.extend(action.cmd.clone().unwrap_or_default());
         }
@@ -100,9 +100,12 @@ fn run_action(action: &Action, dry_run: bool) -> Result<()> {
     let argv = action_argv(action);
     if dry_run {
         let mut out = std::io::stdout().lock();
-        if writeln!(out, "{}", display_command(&argv)).is_err() {
-            // Downstream closed the pipe (e.g. `| head -1`): stop quietly.
-            std::process::exit(0);
+        if let Err(err) = writeln!(out, "{}", display_command(&argv)) {
+            return match err.kind() {
+                // Downstream closed the pipe (`| head -1`): stop quietly.
+                std::io::ErrorKind::BrokenPipe => Ok(()),
+                _ => Err(err).context(l10n::tr(lang, Msg::StdoutWriteFailed)),
+            };
         }
         return Ok(());
     }
@@ -121,7 +124,7 @@ fn run_action(action: &Action, dry_run: bool) -> Result<()> {
         ),
         Err(err) => {
             // niri недоступен — прямой запуск для spawn/spawn-sh (design D2).
-            if action.kind == "builtin" {
+            if action.kind == ActionKind::Builtin {
                 return Err(err).context(l10n::niri_unavailable_builtin(
                     lang,
                     &display_command(&argv),
@@ -147,43 +150,16 @@ pub fn exec_bind(bind: &Bind, dry_run: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn builtin(name: &str, args: &[&str]) -> Action {
-        Action {
-            kind: "builtin".into(),
-            name: Some(name.into()),
-            cmd: if args.is_empty() {
-                None
-            } else {
-                Some(args.iter().map(|s| s.to_string()).collect())
-            },
-        }
-    }
-
-    fn spawn(argv: &[&str]) -> Action {
-        Action {
-            kind: "spawn".into(),
-            name: None,
-            cmd: Some(argv.iter().map(|s| s.to_string()).collect()),
-        }
-    }
-
-    fn spawn_sh(line: &str) -> Action {
-        Action {
-            kind: "spawn-sh".into(),
-            name: None,
-            cmd: Some(vec![line.to_string()]),
-        }
-    }
+    use crate::testutil::{builtin_with_args, spawn, spawn_sh};
 
     #[test]
     fn builtin_argv_routes_through_niri_msg() {
         assert_eq!(
-            action_argv(&builtin("close-window", &[])),
+            action_argv(&builtin_with_args("close-window", &[])),
             vec!["niri", "msg", "action", "close-window"]
         );
         assert_eq!(
-            action_argv(&builtin("switch-layout", &["next"])),
+            action_argv(&builtin_with_args("switch-layout", &["next"])),
             vec!["niri", "msg", "action", "switch-layout", "next"]
         );
     }

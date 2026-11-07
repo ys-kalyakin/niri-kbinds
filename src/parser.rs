@@ -12,7 +12,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use kdl::{KdlDocument, KdlNode, KdlValue};
 
 use crate::groups;
-use crate::model::{Action, Bind};
+use crate::model::{Action, ActionKind, Bind, TitleSource};
 use crate::normalize;
 
 /// One top-level node after `include` expansion, addressed by index so the
@@ -42,6 +42,8 @@ pub fn parse_config_with_lang(path: &Path, lang: crate::l10n::Lang) -> Result<Ve
         .with_context(|| format!("resolving config path {}", path.display()))?;
     let mut store: Vec<StoredDoc> = Vec::new();
     let mut stack: Vec<PathBuf> = Vec::new();
+    // `start` is canonical here; `collect_top_nodes` canonicalizes only the
+    // include targets it reaches recursively.
     let top = collect_top_nodes(&start, &mut stack, &mut store)?;
 
     let mut binds = Vec::new();
@@ -55,7 +57,7 @@ pub fn parse_config_with_lang(path: &Path, lang: crate::l10n::Lang) -> Result<Ve
             continue; // `binds { }` without binds
         };
         for child in children.nodes() {
-            let mut bind = parse_bind(child, &stored.file, &stored.text)?;
+            let mut bind = parse_bind(child, &stored.file, &stored.text);
             groups::finalize(&mut bind, lang);
             binds.push(bind);
         }
@@ -64,28 +66,28 @@ pub fn parse_config_with_lang(path: &Path, lang: crate::l10n::Lang) -> Result<Ve
     Ok(binds)
 }
 
+/// Collect the top-level nodes reachable from `path` (already canonical —
+/// the config entry from `parse_config`, or a canonicalized include target),
+/// splicing `include` targets recursively. Cycle detection works on the
+/// canonical paths on `stack`.
 fn collect_top_nodes(
     path: &Path,
     stack: &mut Vec<PathBuf>,
     store: &mut Vec<StoredDoc>,
 ) -> Result<Vec<TopNodeRef>> {
-    let canonical = path
-        .canonicalize()
-        .with_context(|| format!("resolving include path {}", path.display()))?;
-    if stack.contains(&canonical) {
-        bail!("cyclic include detected at {}", canonical.display());
+    if stack.iter().any(|p| p.as_path() == path) {
+        bail!("cyclic include detected at {}", path.display());
     }
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let doc = KdlDocument::parse_v1(&text)
-        .map_err(|e| anyhow!("parsing {}: {e}", path.display()))
-        .with_context(|| format!("parsing {}", path.display()))?;
+    let doc =
+        KdlDocument::parse_v1(&text).with_context(|| format!("parsing {}", path.display()))?;
     let doc_index = store.len();
     store.push(StoredDoc {
-        file: canonical.clone(),
+        file: path.to_path_buf(),
         text,
         doc,
     });
-    stack.push(canonical);
+    stack.push(path.to_path_buf());
 
     let mut out = Vec::new();
     let node_count = store[doc_index].doc.nodes().len();
@@ -93,7 +95,10 @@ fn collect_top_nodes(
         let node = &store[doc_index].doc.nodes()[node_index];
         if node.name().value() == "include" {
             let target = include_target(node, doc_index, store)?;
-            out.extend(collect_top_nodes(&target, stack, store)?);
+            let canonical = target
+                .canonicalize()
+                .with_context(|| format!("resolving include path {}", target.display()))?;
+            out.extend(collect_top_nodes(&canonical, stack, store)?);
         } else {
             out.push(TopNodeRef {
                 doc_index,
@@ -134,7 +139,9 @@ fn include_target(node: &KdlNode, doc_index: usize, store: &[StoredDoc]) -> Resu
     Ok(dir.join(relative))
 }
 
-fn parse_bind(node: &KdlNode, file: &Path, source: &str) -> Result<Bind> {
+/// Parse one bind node. Infallible by design (SPEC §7.1 tolerance): every
+/// unknown construct is kept in `raw` instead of failing.
+fn parse_bind(node: &KdlNode, file: &Path, source: &str) -> Bind {
     let keys_raw = node.name().value().trim().to_string();
     let line = line_of_offset(source, node.span().offset());
 
@@ -177,17 +184,17 @@ fn parse_bind(node: &KdlNode, file: &Path, source: &str) -> Result<Bind> {
                 .collect();
             match name {
                 "spawn" => actions.push(Action {
-                    kind: "spawn".into(),
+                    kind: ActionKind::Spawn,
                     name: None,
                     cmd: Some(args),
                 }),
                 "spawn-sh" => actions.push(Action {
-                    kind: "spawn-sh".into(),
+                    kind: ActionKind::SpawnSh,
                     name: None,
                     cmd: Some(args),
                 }),
                 other => actions.push(Action {
-                    kind: "builtin".into(),
+                    kind: ActionKind::Builtin,
                     name: Some(other.to_string()),
                     cmd: if args.is_empty() { None } else { Some(args) },
                 }),
@@ -199,10 +206,11 @@ fn parse_bind(node: &KdlNode, file: &Path, source: &str) -> Result<Bind> {
     let keys_display = normalize::keys_display(&keys_raw);
     let overlay_title_present = overlay_title.is_some();
 
-    Ok(Bind {
+    Bind {
         id: String::new(),    // assigned once all binds are collected
         title: String::new(), // filled by groups::finalize
-        title_source: String::new(),
+        // Placeholder, always overwritten by groups::finalize before any read.
+        title_source: TitleSource::RawAction,
         actions,
         keys_raw,
         keys_display,
@@ -215,7 +223,7 @@ fn parse_bind(node: &KdlNode, file: &Path, source: &str) -> Result<Bind> {
         line,
         search: String::new(),
         raw: raw.join("; "),
-    })
+    }
 }
 
 /// Stable ids: kebab-case of the combo, duplicates get `-2`, `-3`, …
@@ -275,7 +283,7 @@ mod tests {
                 continue;
             };
             for child in children.nodes() {
-                let mut bind = parse_bind(child, &stored.file, &stored.text)?;
+                let mut bind = parse_bind(child, &stored.file, &stored.text);
                 groups::finalize(&mut bind, crate::l10n::Lang::Ru);
                 binds.push(bind);
             }
@@ -298,15 +306,15 @@ mod tests {
         assert!(!binds[0].repeat);
         assert!(!binds[0].overlay_title_present);
         assert_eq!(binds[0].actions.len(), 1);
-        assert_eq!(binds[0].actions[0].kind, "builtin");
+        assert_eq!(binds[0].actions[0].kind, ActionKind::Builtin);
         assert_eq!(binds[0].actions[0].name.as_deref(), Some("close-window"));
         assert_eq!(binds[0].title, "Закрыть окно");
-        assert_eq!(binds[0].title_source, "action-name");
+        assert_eq!(binds[0].title_source, TitleSource::ActionName);
         assert_eq!(binds[0].group, "Окна");
 
         assert!(binds[1].overlay_title_present);
         assert_eq!(binds[1].title, "Switch layout");
-        assert_eq!(binds[1].title_source, "overlay-title");
+        assert_eq!(binds[1].title_source, TitleSource::OverlayTitle);
         assert_eq!(binds[1].actions[0].name.as_deref(), Some("switch-layout"));
         assert_eq!(binds[1].actions[0].cmd, Some(vec!["next".to_string()]));
     }
@@ -321,9 +329,9 @@ mod tests {
 }"#,
         )
         .expect("parses");
-        assert_eq!(binds[0].actions[0].kind, "spawn");
+        assert_eq!(binds[0].actions[0].kind, ActionKind::Spawn);
         assert_eq!(binds[0].actions[0].cmd, Some(vec!["kitty".to_string()]));
-        assert_eq!(binds[1].actions[0].kind, "spawn");
+        assert_eq!(binds[1].actions[0].kind, ActionKind::Spawn);
         assert_eq!(
             binds[1].actions[0].cmd,
             Some(vec![
@@ -333,13 +341,13 @@ mod tests {
                 "launcher".to_string(),
             ])
         );
-        assert_eq!(binds[2].actions[0].kind, "spawn-sh");
+        assert_eq!(binds[2].actions[0].kind, ActionKind::SpawnSh);
         assert_eq!(
             binds[2].actions[0].cmd,
             Some(vec!["kitty --class kitty-float".to_string()])
         );
         assert_eq!(binds[2].title, "kitty --class kitty-float");
-        assert_eq!(binds[2].title_source, "command");
+        assert_eq!(binds[2].title_source, TitleSource::Command);
     }
 
     #[test]
@@ -429,44 +437,19 @@ binds {
     fn duplicate_combo_gets_numbered_ids() {
         let mut binds = vec![
             Bind {
-                id: String::new(),
-                title: String::new(),
-                title_source: String::new(),
-                actions: vec![],
-                keys_raw: "Mod+D".into(),
-                keys_display: vec!["Mod".into(), "D".into()],
-                combo: "mod+d".into(),
-                group: String::new(),
-                repeat: true,
-                overlay_title_present: false,
-                overlay_title: None,
-                file: "/tmp/c.kdl".into(),
                 line: 1,
-                search: String::new(),
-                raw: String::new(),
+                ..crate::testutil::sample_bind()
             },
             Bind {
-                combo: "mod+d".into(),
-                ..Bind {
-                    id: String::new(),
-                    title: String::new(),
-                    title_source: String::new(),
-                    actions: vec![],
-                    keys_raw: "Mod+D".into(),
-                    keys_display: vec!["Mod".into(), "D".into()],
-                    combo: "mod+d".into(),
-                    group: String::new(),
-                    repeat: true,
-                    overlay_title_present: false,
-                    overlay_title: None,
-                    file: "/tmp/c.kdl".into(),
-                    line: 2,
-                    search: String::new(),
-                    raw: String::new(),
-                }
-                .clone()
+                line: 2,
+                ..crate::testutil::sample_bind()
             },
         ];
+        for bind in &mut binds {
+            bind.keys_raw = "Mod+D".into();
+            bind.keys_display = vec!["Mod".into(), "D".into()];
+            bind.combo = "mod+d".into();
+        }
         assign_ids(&mut binds);
         assert_eq!(binds[0].id, "mod-d");
         assert_eq!(binds[1].id, "mod-d-2");

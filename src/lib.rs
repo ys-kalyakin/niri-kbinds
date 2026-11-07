@@ -14,6 +14,9 @@ pub mod normalize;
 pub mod parser;
 pub mod ui;
 
+#[cfg(test)]
+pub(crate) mod testutil;
+
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -45,29 +48,50 @@ fn parse_binds(config_path: &Path) -> Result<Vec<Bind>> {
 /// Print lines to stdout, treating a closed pipe (`kbinds list | head`) as
 /// success instead of panicking: Rust ignores SIGPIPE by default, so an
 /// unwrapped `println!` would abort with a panic (SPEC §16 forbids panics).
-pub(crate) fn print_lines<I: IntoIterator<Item = String>>(lines: I) -> Result<()> {
+/// Any other write error is real (EIO, ENOSPC) and surfaces as an error —
+/// the standard exit-code-2 path of `binds-cli`.
+pub(crate) fn print_lines<I>(lines: I) -> Result<()>
+where
+    I: IntoIterator,
+    I::Item: AsRef<str>,
+{
+    let lang = l10n::current();
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for line in lines {
-        if writeln!(out, "{line}").is_err() {
-            return Ok(()); // downstream closed the pipe — stop quietly
+        match write_line(&mut out, line.as_ref()) {
+            Ok(true) => continue,
+            // Downstream closed the pipe — stop quietly.
+            Ok(false) => return Ok(()),
+            Err(err) => return Err(err).context(l10n::tr(lang, Msg::StdoutWriteFailed)),
         }
     }
-    out.flush().ok();
-    Ok(())
+    match out.flush() {
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(()),
+        Err(err) => Err(err).context(l10n::tr(lang, Msg::StdoutWriteFailed)),
+        Ok(()) => Ok(()),
+    }
+}
+
+/// Write one line to `out`: `Ok(true)` to continue, `Ok(false)` when the
+/// downstream pipe closed (stop quietly), `Err` for any real IO error.
+fn write_line(out: &mut impl std::io::Write, line: &str) -> std::io::Result<bool> {
+    match writeln!(out, "{line}") {
+        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => Ok(false),
+        Err(err) => Err(err),
+        Ok(()) => Ok(true),
+    }
 }
 
 /// Entry point of `kbinds list`: human-readable lines, or JSON with `--json`.
 pub fn cmd_list(config_path: &Path, json: bool) -> Result<()> {
     let mut binds = parse_binds(config_path)?;
     if json {
-        print_lines(
-            serde_json::to_string_pretty(&binds)?
-                .lines()
-                .map(String::from),
-        )?;
+        print_lines(serde_json::to_string_pretty(&binds)?.lines())?;
         return Ok(());
     }
-    // Design D9: one line per bind, clustered by group in config order.
+    // Design D9: one line per bind, clustered by group name (alphabetical
+    // order of group names; the stable sort keeps config order within each
+    // group — the overlay's first-appearance order is a separate view).
     binds.sort_by(|a, b| a.group.cmp(&b.group));
     print_lines(binds.iter().map(|bind| {
         format!(
@@ -114,6 +138,41 @@ pub fn cmd_audit(config_path: &Path, json: bool) -> Result<bool> {
             .trim_end_matches('\n')
             .to_string()
     };
-    print_lines(text.lines().map(String::from))?;
+    print_lines(text.lines())?;
     Ok(has_errors)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    /// A writer that always fails with the injected error kind.
+    struct FailingWriter {
+        kind: std::io::ErrorKind,
+    }
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(self.kind, "injected"))
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::new(self.kind, "injected"))
+        }
+    }
+
+    /// Broken pipe is a quiet stop; every other write error is real.
+    #[test]
+    fn write_line_distinguishes_broken_pipe_from_real_errors() {
+        let mut broken = FailingWriter {
+            kind: std::io::ErrorKind::BrokenPipe,
+        };
+        assert_eq!(write_line(&mut broken, "x").ok(), Some(false));
+
+        let mut eio = FailingWriter {
+            kind: std::io::ErrorKind::Other,
+        };
+        let err = write_line(&mut eio, "x").expect_err("non-pipe error propagates");
+        assert_eq!(err.kind(), std::io::ErrorKind::Other);
+    }
 }
